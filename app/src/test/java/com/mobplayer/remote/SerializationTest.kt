@@ -168,4 +168,58 @@ class SerializationTest {
         assertEquals("TEXT_SUBMIT", decodedSubmit.type)
         assertEquals("interstellar trailer", decodedSubmit.payload)
     }
+
+    @Test
+    fun testRemoteLogEntrySerialization() {
+        val entry = com.mobplayer.remote.model.RemoteLogEntry(
+            id = 123456789L,
+            timestamp = "14:32:00.123",
+            direction = com.mobplayer.remote.model.LogDirection.REQUEST,
+            type = "COMMAND",
+            payload = "{\"action\":\"PLAY\"}",
+            isSuccess = true,
+            epochMs = 123456789L
+        )
+
+        val encoded = json.encodeToString(entry)
+        val decoded = json.decodeFromString<com.mobplayer.remote.model.RemoteLogEntry>(encoded)
+
+        assertEquals(123456789L, decoded.id)
+        assertEquals("14:32:00.123", decoded.timestamp)
+        assertEquals(com.mobplayer.remote.model.LogDirection.REQUEST, decoded.direction)
+        assertEquals("COMMAND", decoded.type)
+        assertEquals("{\"action\":\"PLAY\"}", decoded.payload)
+        assertTrue(decoded.isSuccess)
+        assertEquals(123456789L, decoded.epochMs)
+    }
+
+    @Test
+    fun testRemoteLogEntryBackwardCompatibilityWithoutEpochMs() {
+        val rawJson = """
+            {
+                "id": 987654321,
+                "timestamp": "12:00:00.000",
+                "direction": "RESPONSE",
+                "type": "STATE_UPDATE",
+                "payload": "{}",
+                "isSuccess": true
+            }
+        """.trimIndent()
+
+        val decoded = json.decodeFromString<com.mobplayer.remote.model.RemoteLogEntry>(rawJson)
+        assertEquals(987654321L, decoded.id)
+        assertEquals("12:00:00.000", decoded.timestamp)
+        assertEquals(com.mobplayer.remote.model.LogDirection.RESPONSE, decoded.direction)
+        // epochMs defaults to id when not present in JSON
+        assertEquals(987654321L, decoded.epochMs)
+    }
+
+    @Test
+    fun testLogDirectionAllValuesSerialization() {
+        for (direction in com.mobplayer.remote.model.LogDirection.values()) {
+            val encoded = json.encodeToString(direction)
+            val decoded = json.decodeFromString<com.mobplayer.remote.model.LogDirection>(encoded)
+            assertEquals(direction, decoded)
+        }
+    }
 }

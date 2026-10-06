@@ -64,6 +64,7 @@ sealed interface UploadState {
     ) : UploadState
 }
 
+@Serializable
 enum class LogDirection {
     REQUEST,   // Outgoing command/request sent from Phone to TV
     RESPONSE,  // Incoming response received from TV
@@ -74,13 +75,15 @@ enum class LogDirection {
     ERROR      // Socket or parsing error
 }
 
+@Serializable
 data class RemoteLogEntry(
     val id: Long = System.currentTimeMillis(),
     val timestamp: String,
     val direction: LogDirection,
     val type: String,
     val payload: String,
-    val isSuccess: Boolean = true
+    val isSuccess: Boolean = true,
+    val epochMs: Long = id
 )
 
 data class LogEvent(

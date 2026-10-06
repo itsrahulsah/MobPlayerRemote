@@ -1,5 +1,6 @@
 package com.mobplayer.remote.ui
 
+import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -55,6 +56,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material3.AlertDialog
@@ -1104,6 +1106,38 @@ private fun TvLogsTabContent(
                     enabled = logs.isNotEmpty()
                 ) {
                     Icon(Icons.Default.Link, contentDescription = "Copy Dump")
+                }
+
+                IconButton(
+                    onClick = {
+                        onTriggerHaptic()
+                        val targetLogs = if (filteredLogs.isNotEmpty()) filteredLogs else logs
+                        val exportDate = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
+                        val dump = buildString {
+                            appendLine("=== MobPlayer TV Remote Console Logs ===")
+                            appendLine("Exported: $exportDate")
+                            appendLine("Total Entries: ${targetLogs.size}")
+                            appendLine("Retention Policy: Past 24 Hours")
+                            appendLine("========================================")
+                            appendLine()
+                            targetLogs.forEach { entry ->
+                                val status = if (entry.isSuccess) "OK" else "FAIL"
+                                appendLine("[${entry.timestamp}] [${entry.direction}] [$status] ${entry.type}: ${entry.payload}")
+                            }
+                        }
+                        val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(Intent.EXTRA_SUBJECT, "MobPlayer TV Remote Logs (${targetLogs.size} entries)")
+                            putExtra(Intent.EXTRA_TEXT, dump)
+                        }
+                        val shareIntent = Intent.createChooser(sendIntent, "Share TV Logs").apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        context.startActivity(shareIntent)
+                    },
+                    enabled = logs.isNotEmpty()
+                ) {
+                    Icon(Icons.Default.Share, contentDescription = "Share Logs")
                 }
 
                 IconButton(

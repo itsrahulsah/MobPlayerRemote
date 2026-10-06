@@ -287,4 +287,61 @@ class RemoteViewModelTest {
         viewModel.loadMedia("https://example.com/video.mp4", "Sample Video")
         viewModel.loadMedia("") // Blank URL boundary test
     }
+
+    @Test
+    fun testControlSocketRepositoryWithLogPreferencesPersistence() = runTest(testDispatcher) {
+        val testScope = this
+        val storageMap = mutableMapOf<String, String>()
+        val fakeStorage = object : com.mobplayer.remote.repository.LogStorage {
+            override fun getString(key: String): String? = storageMap[key]
+            override fun putString(key: String, value: String) { storageMap[key] = value }
+            override fun remove(key: String) { storageMap.remove(key) }
+        }
+        val logPrefsRepo = com.mobplayer.remote.repository.LogPreferencesRepository(storage = fakeStorage)
+
+        val socketRepo = ControlSocketRepository(testScope, logPreferencesRepository = logPrefsRepo)
+        val viewModel = RemoteViewModel(socketRepo)
+
+        socketRepo.logEvent(LogDirection.REQUEST, "ACTION_TEST", "{\"test\":true}")
+        assertEquals(1, viewModel.logs.value.size)
+
+        // Verify storage received the log
+        val storedLogs = logPrefsRepo.loadLogs()
+        assertEquals(1, storedLogs.size)
+        assertEquals("ACTION_TEST", storedLogs[0].type)
+
+        // Clear logs and verify storage is cleared
+        viewModel.clearLogs()
+        assertTrue(viewModel.logs.value.isEmpty())
+        assertTrue(logPrefsRepo.loadLogs().isEmpty())
+    }
+
+    @Test
+    fun testControlSocketRepositoryLoadsPersistedLogsOnStartup() = runTest(testDispatcher) {
+        val testScope = this
+        val storageMap = mutableMapOf<String, String>()
+        val fakeStorage = object : com.mobplayer.remote.repository.LogStorage {
+            override fun getString(key: String): String? = storageMap[key]
+            override fun putString(key: String, value: String) { storageMap[key] = value }
+            override fun remove(key: String) { storageMap.remove(key) }
+        }
+        val logPrefsRepo = com.mobplayer.remote.repository.LogPreferencesRepository(storage = fakeStorage)
+
+        // Prepopulate storage with an existing log
+        val existingEntry = com.mobplayer.remote.model.RemoteLogEntry(
+            id = 555L,
+            timestamp = "09:00:00.000",
+            direction = LogDirection.SYSTEM,
+            type = "PREVIOUS_LOG",
+            payload = "{}",
+            epochMs = System.currentTimeMillis()
+        )
+        logPrefsRepo.saveLogs(listOf(existingEntry))
+
+        // Create socket repo -> must load prepopulated logs
+        val socketRepo = ControlSocketRepository(testScope, logPreferencesRepository = logPrefsRepo)
+        assertEquals(1, socketRepo.logs.value.size)
+        assertEquals(555L, socketRepo.logs.value[0].id)
+        assertEquals("PREVIOUS_LOG", socketRepo.logs.value[0].type)
+    }
 }

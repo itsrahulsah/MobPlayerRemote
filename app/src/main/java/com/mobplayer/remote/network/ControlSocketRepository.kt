@@ -5,6 +5,7 @@ import com.mobplayer.remote.model.LogDirection
 import com.mobplayer.remote.model.LogEvent
 import com.mobplayer.remote.model.RemoteLogEntry
 import com.mobplayer.remote.model.WebSocketMessage
+import com.mobplayer.remote.repository.LogPreferencesRepository
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
 import io.ktor.client.plugins.websocket.DefaultClientWebSocketSession
@@ -40,7 +41,8 @@ sealed interface ConnectionState {
 }
 
 class ControlSocketRepository(
-    private val scope: CoroutineScope = CoroutineScope(Dispatchers.IO + Job())
+    private val scope: CoroutineScope = CoroutineScope(Dispatchers.IO + Job()),
+    private val logPreferencesRepository: LogPreferencesRepository? = null
 ) {
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -61,8 +63,10 @@ class ControlSocketRepository(
     private val _incomingMessages = MutableSharedFlow<WebSocketMessage>(extraBufferCapacity = 64)
     val incomingMessages: SharedFlow<WebSocketMessage> = _incomingMessages.asSharedFlow()
 
-    // Real-time Request & Response Logs Flow
-    private val _logs = MutableStateFlow<List<RemoteLogEntry>>(emptyList())
+    // Real-time Request & Response Logs Flow (initialized with persisted logs within 24 hours)
+    private val _logs = MutableStateFlow<List<RemoteLogEntry>>(
+        logPreferencesRepository?.loadLogs() ?: emptyList()
+    )
     val logs: StateFlow<List<RemoteLogEntry>> = _logs.asStateFlow()
 
     private val _trafficLogs = MutableSharedFlow<LogEvent>(extraBufferCapacity = 128)
@@ -101,14 +105,19 @@ class ControlSocketRepository(
             LogDirection.ERROR -> safeLog(Log.ERROR, TAG, "❌ [ERROR] $type: $payload")
         }
 
-        // Add to UI log state (keep newest 200 items)
+        // Add to UI log state (keep newest 200 items, and prune entries older than 24h)
+        val cutoff = System.currentTimeMillis() - (logPreferencesRepository?.retentionPeriodMs ?: LogPreferencesRepository.ONE_DAY_MS)
         _logs.update { list ->
-            (listOf(entry) + list).take(200)
+            val pruned = list.filter { it.epochMs >= cutoff }
+            val updated = (listOf(entry) + pruned).take(200)
+            logPreferencesRepository?.saveLogs(updated)
+            updated
         }
     }
 
     fun clearLogs() {
         _logs.value = emptyList()
+        logPreferencesRepository?.clearLogs()
     }
 
     fun connect(endpointUrl: String) {
