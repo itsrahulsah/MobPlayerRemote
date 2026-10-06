@@ -434,37 +434,17 @@ private fun RemotePadTabContent(
                     )
                 },
                 trailingIcon = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (searchQuery.isNotEmpty()) {
-                            IconButton(
-                                onClick = {
-                                    searchQuery = ""
-                                },
-                                modifier = Modifier.size(36.dp)
-                            ) {
-                                Icon(
-                                    Icons.Default.Close,
-                                    contentDescription = "Clear search",
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                        }
+                    if (searchQuery.isNotEmpty()) {
                         IconButton(
                             onClick = {
-                                if (searchQuery.isNotBlank()) {
-                                    onTriggerHaptic()
-                                    viewModel.sendTextSubmit(searchQuery.trim())
-                                    focusManager.clearFocus()
-                                }
+                                searchQuery = ""
                             },
-                            enabled = searchQuery.isNotBlank(),
                             modifier = Modifier.size(36.dp)
                         ) {
                             Icon(
-                                Icons.AutoMirrored.Filled.Send,
-                                contentDescription = "Submit search",
-                                modifier = Modifier.size(18.dp),
-                                tint = if (searchQuery.isNotBlank()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                                Icons.Default.Close,
+                                contentDescription = "Clear search",
+                                modifier = Modifier.size(18.dp)
                             )
                         }
                     }
