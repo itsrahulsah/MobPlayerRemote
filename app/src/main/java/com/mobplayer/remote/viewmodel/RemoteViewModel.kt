@@ -272,6 +272,11 @@ class RemoteViewModel(
         _searchHistory.value = emptyList()
     }
 
+    fun getFilteredSuggestions(query: String): List<String> {
+        return searchPreferencesRepository?.filterAndRank(query, _searchHistory.value)
+            ?: SearchPreferencesRepository.filterAndRankSuggestions(query, _searchHistory.value)
+    }
+
     fun sendTextInput(text: String) {
         viewModelScope.launch {
             socketRepository.sendMessage(WebSocketMessage("TEXT_INPUT", text))

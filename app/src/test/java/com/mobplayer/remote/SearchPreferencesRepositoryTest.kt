@@ -122,4 +122,64 @@ class SearchPreferencesRepositoryTest {
         storage.putString(SearchPreferencesRepository.KEY_SEARCH_HISTORY, "invalid json")
         assertTrue(repository.getSearchHistory().isEmpty())
     }
+
+    @Test
+    fun testFilterAndRankExactMatchOnTop() {
+        val history = listOf("Avatar: The Way of Water", "Avatar", "The Last Airbender: Avatar")
+        val ranked = SearchPreferencesRepository.filterAndRankSuggestions("avatar", history)
+
+        assertEquals("Avatar", ranked[0])
+        assertEquals("Avatar: The Way of Water", ranked[1])
+        assertEquals("The Last Airbender: Avatar", ranked[2])
+    }
+
+    @Test
+    fun testFilterAndRankPrefixMatchAboveSubstringMatch() {
+        val history = listOf("Best of YouTube", "YouTube Music", "About YouTube")
+        val ranked = SearchPreferencesRepository.filterAndRankSuggestions("you", history)
+
+        assertEquals("YouTube Music", ranked[0])
+        assertTrue(ranked.contains("Best of YouTube"))
+        assertTrue(ranked.contains("About YouTube"))
+    }
+
+    @Test
+    fun testFilterAndRankWordPrefixMatch() {
+        val history = listOf("Signatures of Earth", "Top 10 Nature Videos")
+        val ranked = SearchPreferencesRepository.filterAndRankSuggestions("nat", history)
+
+        // "Nature" is a word prefix, whereas "Signatures" contains "nat" inside the word
+        assertEquals("Top 10 Nature Videos", ranked[0])
+        assertEquals("Signatures of Earth", ranked[1])
+    }
+
+    @Test
+    fun testFilterAndRankMultiKeywordTokens() {
+        val history = listOf("4K Nature Relaxing", "4K HDR Movies", "Nature Sound")
+        val ranked = SearchPreferencesRepository.filterAndRankSuggestions("nature 4k", history)
+
+        assertEquals(1, ranked.size)
+        assertEquals("4K Nature Relaxing", ranked[0])
+    }
+
+    @Test
+    fun testFilterAndRankPreservesLatestOnTopForEqualScores() {
+        // Both start with "mo" (same match quality score 80)
+        val history = listOf("Modern Family", "Movie Trailers")
+        val ranked = SearchPreferencesRepository.filterAndRankSuggestions("mo", history)
+
+        // Preserves MRU: Modern Family was searched more recently so stays on top
+        assertEquals("Modern Family", ranked[0])
+        assertEquals("Movie Trailers", ranked[1])
+    }
+
+    @Test
+    fun testFilterAndRankBlankQueryReturnsFullHistory() {
+        val history = listOf("Alpha", "Beta", "Gamma")
+        val rankedBlank = SearchPreferencesRepository.filterAndRankSuggestions("", history)
+        val rankedSpaces = SearchPreferencesRepository.filterAndRankSuggestions("   ", history)
+
+        assertEquals(history, rankedBlank)
+        assertEquals(history, rankedSpaces)
+    }
 }

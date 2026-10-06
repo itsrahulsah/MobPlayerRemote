@@ -70,9 +70,56 @@ class SearchPreferencesRepository(
         return current
     }
 
+    /**
+     * Filters and ranks search suggestions using keyword match quality:
+     * - Exact matches (highest priority)
+     * - Suggestions starting with query
+     * - Suggestions where a word starts with query
+     * - Multi-keyword token prefix matches
+     * - Substring matches
+     * Ties preserve MRU order (latest searched on top).
+     */
+    fun filterAndRank(query: String, history: List<String> = getSearchHistory()): List<String> {
+        return filterAndRankSuggestions(query, history)
+    }
+
     companion object {
         const val PREFS_NAME = "mobplayer_search_prefs"
         const val KEY_SEARCH_HISTORY = "search_history"
         const val DEFAULT_MAX_HISTORY = 30
+
+        /**
+         * Key-based filtering and ranking for optimal search suggestions.
+         * Ranks the best matching suggestions to the top while preserving
+         * latest-on-top ordering for equivalent match scores.
+         */
+        fun filterAndRankSuggestions(query: String, history: List<String>): List<String> {
+            val trimmed = query.trim()
+            if (trimmed.isEmpty()) return history
+
+            val lowerQuery = trimmed.lowercase()
+            val queryTokens = lowerQuery.split(Regex("\\s+")).filter { it.isNotEmpty() }
+
+            return history.mapNotNull { candidate ->
+                val lowerCandidate = candidate.lowercase()
+                val matchesAllTokens = queryTokens.all { token -> lowerCandidate.contains(token) }
+                if (!matchesAllTokens) return@mapNotNull null
+
+                val candidateWords = lowerCandidate.split(Regex("[^\\p{L}\\p{Nd}]+")).filter { it.isNotEmpty() }
+
+                val score = when {
+                    lowerCandidate == lowerQuery -> 100
+                    lowerCandidate.startsWith(lowerQuery) -> 80
+                    candidateWords.any { it.startsWith(lowerQuery) } -> 70
+                    queryTokens.isNotEmpty() && lowerCandidate.startsWith(queryTokens[0]) -> 60
+                    queryTokens.all { token -> candidateWords.any { word -> word.startsWith(token) } } -> 50
+                    lowerCandidate.contains(lowerQuery) -> 40
+                    else -> 20
+                }
+                candidate to score
+            }
+            .sortedWith(compareByDescending { it.second })
+            .map { it.first }
+        }
     }
 }

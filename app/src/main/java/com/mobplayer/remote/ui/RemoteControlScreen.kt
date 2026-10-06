@@ -405,12 +405,9 @@ private fun RemotePadTabContent(
     val focusManager = LocalFocusManager.current
 
     val suggestions = remember(searchHistory, searchQuery) {
-        if (searchQuery.isBlank()) {
-            searchHistory
-        } else {
-            searchHistory.filter { it.contains(searchQuery.trim(), ignoreCase = true) }
-        }
+        viewModel.getFilteredSuggestions(searchQuery)
     }
+    val defaultPresets = listOf("Music", "Movies", "News", "Gaming", "4K", "Trailers")
 
     Column(
         modifier = Modifier
@@ -485,7 +482,7 @@ private fun RemotePadTabContent(
                 modifier = Modifier.fillMaxWidth()
             )
 
-            // Auto-Fill Suggestions (Latest searched on top)
+            // Auto-Fill Suggestions (Ranked with Key Filter, Best / Latest on top)
             if (suggestions.isNotEmpty()) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -493,7 +490,7 @@ private fun RemotePadTabContent(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = if (searchQuery.isBlank()) "Recent Searches" else "Suggestions",
+                        text = if (searchQuery.isBlank()) "Recent Searches" else "Best Matches",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontWeight = FontWeight.SemiBold
@@ -519,7 +516,8 @@ private fun RemotePadTabContent(
                         .horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    suggestions.forEach { item ->
+                    suggestions.forEachIndexed { index, item ->
+                        val isTopMatch = searchQuery.isNotBlank() && index == 0
                         SuggestionChip(
                             onClick = {
                                 onTriggerHaptic()
@@ -527,15 +525,48 @@ private fun RemotePadTabContent(
                                 viewModel.sendTextSubmit(item)
                                 focusManager.clearFocus()
                             },
-                            label = { Text(item, maxLines = 1) },
+                            label = {
+                                Text(
+                                    item,
+                                    maxLines = 1,
+                                    fontWeight = if (isTopMatch) FontWeight.Bold else FontWeight.Normal
+                                )
+                            },
                             icon = {
                                 Icon(
                                     Icons.Default.History,
                                     contentDescription = null,
                                     modifier = Modifier.size(16.dp),
-                                    tint = MaterialTheme.colorScheme.primary
+                                    tint = if (isTopMatch) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             },
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                    }
+                }
+            } else if (searchQuery.isBlank()) {
+                // Quick key presets if history is empty
+                Text(
+                    text = "Quick Key Filters",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    defaultPresets.forEach { preset ->
+                        SuggestionChip(
+                            onClick = {
+                                onTriggerHaptic()
+                                searchQuery = preset
+                                viewModel.sendTextSubmit(preset)
+                                focusManager.clearFocus()
+                            },
+                            label = { Text(preset) },
                             shape = RoundedCornerShape(12.dp)
                         )
                     }
@@ -1684,9 +1715,17 @@ fun SearchTvDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                if (searchHistory.isNotEmpty()) {
+                val dialogSuggestions = remember(searchHistory, queryInput) {
+                    com.mobplayer.remote.repository.SearchPreferencesRepository.filterAndRankSuggestions(queryInput, searchHistory)
+                }
+
+                if (dialogSuggestions.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(12.dp))
-                    Text("Recent Searches:", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                    Text(
+                        if (queryInput.isBlank()) "Recent Searches:" else "Best Matches:",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold
+                    )
                     Spacer(modifier = Modifier.height(6.dp))
                     Row(
                         modifier = Modifier
@@ -1694,19 +1733,25 @@ fun SearchTvDialog(
                             .horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        searchHistory.take(8).forEach { recent ->
+                        dialogSuggestions.take(8).forEachIndexed { index, recent ->
+                            val isTop = queryInput.isNotBlank() && index == 0
                             SuggestionChip(
                                 onClick = {
                                     queryInput = recent
                                     onSearch(recent)
                                 },
-                                label = { Text(recent) },
+                                label = {
+                                    Text(
+                                        recent,
+                                        fontWeight = if (isTop) FontWeight.Bold else FontWeight.Normal
+                                    )
+                                },
                                 icon = {
                                     Icon(
                                         Icons.Default.History,
                                         contentDescription = null,
                                         modifier = Modifier.size(16.dp),
-                                        tint = MaterialTheme.colorScheme.primary
+                                        tint = if (isTop) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                             )
