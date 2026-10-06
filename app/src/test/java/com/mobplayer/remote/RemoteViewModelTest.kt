@@ -196,8 +196,40 @@ class RemoteViewModelTest {
         val socketRepo = ControlSocketRepository(testScope)
         val viewModel = RemoteViewModel(socketRepo)
 
+        // Set simulated playback state
+        viewModel.onVolumeSliderChanged(0.5f)
+        viewModel.seekTo(12000L)
+        assertEquals(12000L, viewModel.playerState.value?.positionMs)
+
+        // Calling stop must reset playing state and positionMs to 0
         viewModel.stop()
-        // Method executes cleanly without error
+        assertEquals(false, viewModel.playerState.value?.isPlaying)
+        assertEquals(0L, viewModel.playerState.value?.positionMs)
+    }
+
+    @Test
+    fun testSendRawCommand() = runTest(testDispatcher) {
+        val testScope = this
+        val socketRepo = ControlSocketRepository(testScope)
+        val viewModel = RemoteViewModel(socketRepo)
+
+        // Valid raw command
+        viewModel.sendRawCommand("COMMAND", "{\"action\":\"PLAY\"}")
+        viewModel.sendRawCommand("CUSTOM_EVENT", "{\"payload\":\"test\"}")
+
+        // Blank type boundary test: should be ignored safely
+        viewModel.sendRawCommand("", "{}")
+        viewModel.sendRawCommand("   ", "{}")
+    }
+
+    @Test
+    fun testSendBackAndHomeNavigation() = runTest(testDispatcher) {
+        val testScope = this
+        val socketRepo = ControlSocketRepository(testScope)
+        val viewModel = RemoteViewModel(socketRepo)
+
+        viewModel.sendBack()
+        viewModel.sendHome()
     }
 
     @Test

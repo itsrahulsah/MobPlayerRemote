@@ -73,6 +73,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
@@ -133,9 +134,10 @@ fun RemoteControlScreen(
     val haptics = LocalHapticFeedback.current
     val context = LocalContext.current
 
-    var selectedTab by remember { mutableIntStateOf(0) } // 0: Remote Pad, 1: Player, 2: TV Logs
+    var selectedTab by remember { mutableIntStateOf(0) } // 0: Remote Pad, 1: Player
     var showLoadMediaDialog by remember { mutableStateOf(false) }
     var showSearchDialog by remember { mutableStateOf(false) }
+    var showLogsSheet by remember { mutableStateOf(false) }
 
     val videoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
@@ -202,6 +204,22 @@ fun RemoteControlScreen(
                         showSearchDialog = true
                     }) {
                         Icon(Icons.Default.Search, contentDescription = "Search TV")
+                    }
+
+                    // TV Logs
+                    IconButton(onClick = {
+                        triggerHaptic()
+                        showLogsSheet = true
+                    }) {
+                        BadgedBox(
+                            badge = {
+                                if (logs.isNotEmpty()) {
+                                    Badge { Text(logs.size.toString()) }
+                                }
+                            }
+                        ) {
+                            Icon(Icons.Default.Terminal, contentDescription = "TV Logs")
+                        }
                     }
 
                     // Upload Local Video File
@@ -307,25 +325,6 @@ fun RemoteControlScreen(
                     icon = { Icon(Icons.Default.Movie, contentDescription = null, modifier = Modifier.size(20.dp)) },
                     text = { Text("Player") }
                 )
-                Tab(
-                    selected = selectedTab == 2,
-                    onClick = {
-                        triggerHaptic()
-                        selectedTab = 2
-                    },
-                    icon = {
-                        BadgedBox(
-                            badge = {
-                                if (logs.isNotEmpty()) {
-                                    Badge { Text(logs.size.toString()) }
-                                }
-                            }
-                        ) {
-                            Icon(Icons.Default.Terminal, contentDescription = null, modifier = Modifier.size(20.dp))
-                        }
-                    },
-                    text = { Text("TV Logs") }
-                )
             }
 
             // Tab Contents
@@ -334,8 +333,7 @@ fun RemoteControlScreen(
                     0 -> RemotePadTabContent(
                         state = state,
                         viewModel = viewModel,
-                        onTriggerHaptic = ::triggerHaptic,
-                        onOpenSearchDialog = { showSearchDialog = true }
+                        onTriggerHaptic = ::triggerHaptic
                     )
                     1 -> MediaPlayerTabContent(
                         state = state,
@@ -344,12 +342,6 @@ fun RemoteControlScreen(
                         onOpenLoadDialog = { showLoadMediaDialog = true },
                         onOpenSearchDialog = { showSearchDialog = true },
                         onPickVideo = { videoPickerLauncher.launch(arrayOf("video/*")) }
-                    )
-                    2 -> TvLogsTabContent(
-                        logs = logs,
-                        onClearLogs = { viewModel.clearLogs() },
-                        onSendRawCommand = { type, payload -> viewModel.sendRawCommand(type, payload) },
-                        onTriggerHaptic = ::triggerHaptic
                     )
                 }
             }
@@ -378,6 +370,19 @@ fun RemoteControlScreen(
             }
         )
     }
+
+    if (showLogsSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showLogsSheet = false }
+        ) {
+            TvLogsTabContent(
+                logs = logs,
+                onClearLogs = { viewModel.clearLogs() },
+                onSendRawCommand = { type, payload -> viewModel.sendRawCommand(type, payload) },
+                onTriggerHaptic = ::triggerHaptic
+            )
+        }
+    }
 }
 
 /**
@@ -387,8 +392,7 @@ fun RemoteControlScreen(
 private fun RemotePadTabContent(
     state: PlayerStatePayload?,
     viewModel: RemoteViewModel,
-    onTriggerHaptic: () -> Unit,
-    onOpenSearchDialog: () -> Unit
+    onTriggerHaptic: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -398,21 +402,21 @@ private fun RemotePadTabContent(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
-        // Navigation Action Buttons (Back, Home, Search, Stop)
+        // Navigation Action Buttons (Back, Home)
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceEvenly
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             OutlinedButton(
                 onClick = {
                     onTriggerHaptic()
                     viewModel.sendBack()
                 },
-                modifier = Modifier.weight(1f).padding(horizontal = 3.dp),
+                modifier = Modifier.weight(1f),
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                Spacer(modifier = Modifier.width(4.dp))
+                Spacer(modifier = Modifier.width(6.dp))
                 Text("Back")
             }
 
@@ -421,41 +425,12 @@ private fun RemotePadTabContent(
                     onTriggerHaptic()
                     viewModel.sendHome()
                 },
-                modifier = Modifier.weight(1f).padding(horizontal = 3.dp),
+                modifier = Modifier.weight(1f),
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Icon(Icons.Default.Home, contentDescription = "Home")
-                Spacer(modifier = Modifier.width(4.dp))
+                Spacer(modifier = Modifier.width(6.dp))
                 Text("Home")
-            }
-
-            OutlinedButton(
-                onClick = {
-                    onTriggerHaptic()
-                    onOpenSearchDialog()
-                },
-                modifier = Modifier.weight(1f).padding(horizontal = 3.dp),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Icon(Icons.Default.Search, contentDescription = "Search")
-                Spacer(modifier = Modifier.width(4.dp))
-                Text("Search")
-            }
-
-            OutlinedButton(
-                onClick = {
-                    onTriggerHaptic()
-                    viewModel.stop()
-                },
-                modifier = Modifier.weight(1f).padding(horizontal = 3.dp),
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.outlinedButtonColors(
-                    contentColor = MaterialTheme.colorScheme.error
-                )
-            ) {
-                Icon(Icons.Default.Stop, contentDescription = "Stop")
-                Spacer(modifier = Modifier.width(4.dp))
-                Text("Stop")
             }
         }
 
@@ -604,52 +579,74 @@ private fun RemotePadTabContent(
             }
         }
 
-        // Mini Playback Transport Row (Quick Play / Pause / Seek)
+        // Mini Playback Transport Row (Rewind, Play/Pause, Stop, Forward)
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            OutlinedButton(
+            FilledIconButton(
                 onClick = {
                     onTriggerHaptic()
                     viewModel.seekRelative(-10_000L)
                 },
-                shape = RoundedCornerShape(12.dp)
+                modifier = Modifier.size(52.dp),
+                shape = CircleShape,
+                colors = IconButtonDefaults.filledIconButtonColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             ) {
-                Icon(Icons.Default.FastRewind, contentDescription = null)
-                Spacer(modifier = Modifier.width(4.dp))
-                Text("-10s")
+                Icon(Icons.Default.FastRewind, contentDescription = "Rewind 10s")
             }
 
-            Button(
+            FilledIconButton(
                 onClick = {
                     onTriggerHaptic()
                     viewModel.togglePlayPause()
                 },
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary
+                modifier = Modifier.size(62.dp),
+                shape = CircleShape,
+                colors = IconButtonDefaults.filledIconButtonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
                 )
             ) {
                 Icon(
                     if (state?.isPlaying == true) Icons.Default.Pause else Icons.Default.PlayArrow,
-                    contentDescription = null
+                    contentDescription = if (state?.isPlaying == true) "Pause" else "Play",
+                    modifier = Modifier.size(32.dp)
                 )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(if (state?.isPlaying == true) "Pause" else "Play")
             }
 
-            OutlinedButton(
+            FilledIconButton(
+                onClick = {
+                    onTriggerHaptic()
+                    viewModel.stop()
+                },
+                modifier = Modifier.size(52.dp),
+                shape = CircleShape,
+                colors = IconButtonDefaults.filledIconButtonColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer,
+                    contentColor = MaterialTheme.colorScheme.onErrorContainer
+                )
+            ) {
+                Icon(Icons.Default.Stop, contentDescription = "Stop", modifier = Modifier.size(26.dp))
+            }
+
+            FilledIconButton(
                 onClick = {
                     onTriggerHaptic()
                     viewModel.seekRelative(10_000L)
                 },
-                shape = RoundedCornerShape(12.dp)
+                modifier = Modifier.size(52.dp),
+                shape = CircleShape,
+                colors = IconButtonDefaults.filledIconButtonColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             ) {
-                Text("+10s")
-                Spacer(modifier = Modifier.width(4.dp))
-                Icon(Icons.Default.FastForward, contentDescription = null)
+                Icon(Icons.Default.FastForward, contentDescription = "Forward 10s")
             }
         }
 
@@ -808,6 +805,21 @@ private fun MediaPlayerTabContent(
             FilledIconButton(
                 onClick = {
                     onTriggerHaptic()
+                    viewModel.stop()
+                },
+                modifier = Modifier.size(48.dp),
+                shape = CircleShape,
+                colors = IconButtonDefaults.filledIconButtonColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer,
+                    contentColor = MaterialTheme.colorScheme.onErrorContainer
+                )
+            ) {
+                Icon(Icons.Default.Stop, contentDescription = "Stop")
+            }
+
+            FilledIconButton(
+                onClick = {
+                    onTriggerHaptic()
                     viewModel.seekRelative(10_000L)
                 },
                 modifier = Modifier.size(48.dp),
@@ -825,21 +837,6 @@ private fun MediaPlayerTabContent(
                 shape = CircleShape
             ) {
                 Text("+30", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
-            }
-
-            FilledIconButton(
-                onClick = {
-                    onTriggerHaptic()
-                    viewModel.stop()
-                },
-                modifier = Modifier.size(48.dp),
-                shape = CircleShape,
-                colors = IconButtonDefaults.filledIconButtonColors(
-                    containerColor = MaterialTheme.colorScheme.errorContainer,
-                    contentColor = MaterialTheme.colorScheme.onErrorContainer
-                )
-            ) {
-                Icon(Icons.Default.Stop, contentDescription = "Stop")
             }
         }
 
