@@ -53,10 +53,18 @@ class AuthViewModel(
                         dispatchAuthRequest()
                     }
                     is ConnectionState.Error -> {
-                        _uiState.value = _uiState.value.copy(
-                            step = AuthStep.Failed(state.message),
-                            errorMessage = state.message
-                        )
+                        // Only kick out to Failed screen if we were not already authenticated
+                        if (_uiState.value.step !is AuthStep.Authenticated) {
+                            _uiState.value = _uiState.value.copy(
+                                step = AuthStep.Failed(state.message),
+                                errorMessage = state.message
+                            )
+                        } else {
+                            // If authenticated, just record the error message, do not reset UI to PIN screen
+                            _uiState.value = _uiState.value.copy(
+                                errorMessage = state.message
+                            )
+                        }
                     }
                     is ConnectionState.Disconnected -> {
                         if (_uiState.value.step is AuthStep.Connecting || _uiState.value.step is AuthStep.PinRequired) {
@@ -88,6 +96,30 @@ class AuthViewModel(
         socketRepository.connect(device.endpointUrl)
     }
 
+    fun connectToManualHost(host: String, port: Int = 8080) {
+        val cleanHost = host.trim().removePrefix("http://").removePrefix("https://").removePrefix("ws://")
+        val parsedPort = if (cleanHost.contains(":")) {
+            cleanHost.substringAfter(":").toIntOrNull() ?: port
+        } else {
+            port
+        }
+        val finalHost = cleanHost.substringBefore(":")
+        val device = TvDevice(
+            name = "MobPlayer TV ($finalHost)",
+            host = finalHost,
+            port = parsedPort
+        )
+        connectToDevice(device)
+    }
+
+    private var pendingPinSubmit: String? = null
+
+    fun retryConnection() {
+        pendingPinSubmit = null
+        val device = _uiState.value.selectedDevice ?: return
+        connectToDevice(device)
+    }
+
     private suspend fun dispatchAuthRequest() {
         val device = _uiState.value.selectedDevice ?: return
         val savedToken = tokenRepository.getToken(device.name) ?: "no-token-yet"
@@ -103,8 +135,21 @@ class AuthViewModel(
     fun submitPin() {
         val pin = _uiState.value.pinInput
         if (pin.length == 4) {
-            viewModelScope.launch {
-                socketRepository.sendMessage(WebSocketMessage("PIN_SUBMIT", pin))
+            val isConnected = socketRepository.connectionState.value is ConnectionState.Connected
+            if (isConnected) {
+                viewModelScope.launch {
+                    socketRepository.sendMessage(WebSocketMessage("PIN_SUBMIT", pin))
+                }
+            } else {
+                pendingPinSubmit = pin
+                val device = _uiState.value.selectedDevice
+                if (device != null) {
+                    _uiState.value = _uiState.value.copy(
+                        step = AuthStep.Connecting,
+                        errorMessage = null
+                    )
+                    socketRepository.connect(device.endpointUrl)
+                }
             }
         }
     }
@@ -113,12 +158,26 @@ class AuthViewModel(
         val device = _uiState.value.selectedDevice
         when (message.type) {
             "PIN_REQUIRED" -> {
-                _uiState.value = _uiState.value.copy(
-                    step = AuthStep.PinRequired,
-                    errorMessage = null
-                )
+                val autoPin = pendingPinSubmit
+                if (autoPin != null && autoPin.length == 4) {
+                    pendingPinSubmit = null
+                    _uiState.value = _uiState.value.copy(
+                        step = AuthStep.PinRequired,
+                        pinInput = autoPin,
+                        errorMessage = null
+                    )
+                    viewModelScope.launch {
+                        socketRepository.sendMessage(WebSocketMessage("PIN_SUBMIT", autoPin))
+                    }
+                } else {
+                    _uiState.value = _uiState.value.copy(
+                        step = AuthStep.PinRequired,
+                        errorMessage = null
+                    )
+                }
             }
             "AUTH_SUCCESS" -> {
+                pendingPinSubmit = null
                 val token = message.payload
                 if (device != null && token.isNotBlank()) {
                     tokenRepository.saveToken(device.name, token)
@@ -129,6 +188,7 @@ class AuthViewModel(
                 )
             }
             "AUTH_FAILED" -> {
+                pendingPinSubmit = null
                 val reason = message.payload.ifBlank { "Authentication failed" }
                 if (device != null) {
                     tokenRepository.clearToken(device.name)
@@ -144,7 +204,9 @@ class AuthViewModel(
     }
 
     fun reset() {
+        pendingPinSubmit = null
         socketRepository.disconnect()
         _uiState.value = AuthUiState()
     }
 }
+

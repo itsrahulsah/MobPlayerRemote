@@ -10,10 +10,14 @@ data class WebSocketMessage(
 
 @Serializable
 data class PlayerCommandPayload(
-    val action: String, // "PLAY", "PAUSE", "STOP", "SEEK", "SET_VOLUME", "SET_SPEED"
+    val action: String, // "PLAY", "PAUSE", "STOP", "SEEK", "SET_VOLUME", "SET_SPEED", "DPAD_UP", "DPAD_DOWN", "DPAD_LEFT", "DPAD_RIGHT", "DPAD_CENTER", "BACK", "HOME", "MUTE", etc.
     val seekToMs: Long? = null,
+    val positionMs: Long? = null,
     val volume: Float? = null,
-    val speed: Float? = null
+    val speed: Float? = null,
+    val keyCode: Int? = null,
+    val url: String? = null,
+    val title: String? = null
 )
 
 @Serializable
@@ -28,13 +32,19 @@ data class PlayerStatePayload(
 data class TvDevice(
     val name: String,
     val host: String,
-    val port: Int
+    val port: Int = 8080
 ) {
     val endpointUrl: String
-        get() = "ws://$host:$port/control"
+        get() {
+            val formattedHost = if (host.contains(":") && !host.startsWith("[")) "[$host]" else host
+            return "ws://$formattedHost:$port/control"
+        }
 
     val httpBaseUrl: String
-        get() = "http://$host:$port"
+        get() {
+            val formattedHost = if (host.contains(":") && !host.startsWith("[")) "[$host]" else host
+            return "http://$formattedHost:$port"
+        }
 }
 
 sealed interface UploadState {
@@ -54,6 +64,25 @@ sealed interface UploadState {
     ) : UploadState
 }
 
+enum class LogDirection {
+    REQUEST,   // Outgoing command/request sent from Phone to TV
+    RESPONSE,  // Incoming response received from TV
+    STATE,     // Playback state update received from TV
+    SYSTEM,    // Socket lifecycle/connection event
+    INCOMING,  // Incoming raw message
+    OUTGOING,  // Outgoing raw message
+    ERROR      // Socket or parsing error
+}
+
+data class RemoteLogEntry(
+    val id: Long = System.currentTimeMillis(),
+    val timestamp: String,
+    val direction: LogDirection,
+    val type: String,
+    val payload: String,
+    val isSuccess: Boolean = true
+)
+
 data class LogEvent(
     val id: Long = System.nanoTime(),
     val timestamp: Long = System.currentTimeMillis(),
@@ -61,10 +90,3 @@ data class LogEvent(
     val tag: String,
     val message: String
 )
-
-enum class LogDirection {
-    INCOMING,
-    OUTGOING,
-    SYSTEM,
-    ERROR
-}

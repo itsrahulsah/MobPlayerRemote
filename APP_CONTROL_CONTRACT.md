@@ -35,7 +35,7 @@ MobPlayer TV acts as a WebSocket server running locally on the TV device (defaul
 Clients discover MobPlayer TV devices on the local Wi-Fi network using standard **Android Network Service Discovery (NSD) / mDNS / ZeroConf**.
 
 - **Service Name**: `MobPlayer TV` (or fallback with dynamic index)
-- **Service Type**: `_http._tcp.`
+- **Service Type**: `_mobplayer._tcp.` (resolves on mDNS to `_mobplayer._tcp.local.`)
 - **Default Port**: `8080`
 - **Transport**: TCP
 

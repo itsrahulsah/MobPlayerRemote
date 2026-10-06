@@ -1,12 +1,19 @@
 package com.mobplayer.remote.ui
 
 import android.net.Uri
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,79 +24,95 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.BugReport
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.automirrored.filled.VolumeDown
+import androidx.compose.material.icons.automirrored.filled.VolumeMute
+import androidx.compose.material.icons.automirrored.filled.VolumeOff
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.CloudUpload
+import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.FastForward
 import androidx.compose.material.icons.filled.FastRewind
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowLeft
-import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PowerSettingsNew
-import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material.icons.filled.VolumeDown
-import androidx.compose.material.icons.filled.VolumeMute
-import androidx.compose.material.icons.filled.VolumeOff
-import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SuggestionChip
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.mobplayer.remote.model.LogDirection
-import com.mobplayer.remote.model.LogEvent
+import com.mobplayer.remote.model.PlayerStatePayload
+import com.mobplayer.remote.model.RemoteLogEntry
 import com.mobplayer.remote.model.TvDevice
 import com.mobplayer.remote.model.UploadState
+import com.mobplayer.remote.network.ConnectionState
 import com.mobplayer.remote.viewmodel.RemoteViewModel
-import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.Locale
+import kotlin.math.abs
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -99,26 +122,44 @@ fun RemoteControlScreen(
     onDisconnect: () -> Unit
 ) {
     val state by viewModel.playerState.collectAsState()
+    val connectionState by viewModel.connectionState.collectAsState()
+    val logs by viewModel.logs.collectAsState()
     val uploadState by viewModel.uploadState.collectAsState()
-    val eventLogs by viewModel.eventLogs.collectAsState()
     val haptics = LocalHapticFeedback.current
     val context = LocalContext.current
 
+    var selectedTab by remember { mutableIntStateOf(0) } // 0: Remote Pad, 1: Player, 2: TV Logs
     var showLoadMediaDialog by remember { mutableStateOf(false) }
-    var showDiagnosticsSheet by remember { mutableStateOf(false) }
+
+    val videoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            viewModel.uploadVideo(context, device.httpBaseUrl, uri)
+        }
+    }
 
     fun triggerHaptic() {
         haptics.performHapticFeedback(HapticFeedbackType.LongPress)
     }
 
-    // Video File Picker Launcher
-    val videoPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        if (uri != null) {
-            triggerHaptic()
-            viewModel.uploadVideo(context, device.httpBaseUrl, uri)
-        }
+    val isConnected = connectionState is ConnectionState.Connected
+    val isConnecting = connectionState is ConnectionState.Connecting
+
+    val statusColor by animateColorAsState(
+        targetValue = when {
+            isConnected -> Color(0xFF4CAF50)
+            isConnecting -> Color(0xFFFFC107)
+            else -> Color(0xFFF44336)
+        },
+        label = "StatusColor"
+    )
+
+    val statusText = when {
+        isConnecting -> "Connecting..."
+        isConnected -> if (state?.isPlaying == true) "Playing" else "Connected"
+        connectionState is ConnectionState.Error -> "Connection Error"
+        else -> "Disconnected"
     }
 
     Scaffold(
@@ -126,31 +167,60 @@ fun RemoteControlScreen(
             TopAppBar(
                 title = {
                     Column {
-                        Text(device.name, style = MaterialTheme.typography.titleMedium)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(10.dp)
+                                    .background(statusColor, CircleShape)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = device.name,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                         Text(
-                            text = if (state?.isPlaying == true) "Playing (${state?.speed ?: 1.0f}x)" else "Connected",
+                            text = "${device.host}:${device.port} • $statusText",
                             style = MaterialTheme.typography.bodySmall,
-                            color = if (state?.isPlaying == true) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 },
                 actions = {
-                    IconButton(onClick = { videoPickerLauncher.launch("video/*") }) {
-                        Icon(Icons.Default.CloudUpload, contentDescription = "Upload Video to TV")
+                    // Upload Local Video File
+                    IconButton(onClick = {
+                        triggerHaptic()
+                        videoPickerLauncher.launch(arrayOf("video/*"))
+                    }) {
+                        Icon(Icons.Default.CloudUpload, contentDescription = "Upload Video")
                     }
-                    IconButton(onClick = { showLoadMediaDialog = true }) {
-                        Icon(Icons.Default.Link, contentDescription = "Load Video URL")
+
+                    // Quick Load Media Dialog
+                    IconButton(onClick = {
+                        triggerHaptic()
+                        showLoadMediaDialog = true
+                    }) {
+                        Icon(Icons.Default.Link, contentDescription = "Stream Video URL")
                     }
-                    IconButton(onClick = { showDiagnosticsSheet = true }) {
-                        Icon(Icons.Default.BugReport, contentDescription = "Live Diagnostics")
-                    }
+
+                    // Power / Disconnect
                     IconButton(onClick = {
                         triggerHaptic()
                         onDisconnect()
                     }) {
-                        Icon(Icons.Default.PowerSettingsNew, contentDescription = "Disconnect")
+                        Icon(
+                            Icons.Default.PowerSettingsNew,
+                            contentDescription = "Disconnect",
+                            tint = MaterialTheme.colorScheme.error
+                        )
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                )
             )
         }
     ) { paddingValues ->
@@ -158,298 +228,975 @@ fun RemoteControlScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .padding(horizontal = 20.dp)
-                .verticalScroll(rememberScrollState()),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Spacer(modifier = Modifier.height(4.dp))
-
-            // Upload Status Card (Active / Completed / Failed)
-            UploadStatusCard(
-                uploadState = uploadState,
-                onCancel = { viewModel.cancelUpload(context) },
-                onDismiss = { viewModel.resetUploadState() }
-            )
-
-            // Playback Scrubber Section
-            val currentPos = state?.positionMs ?: 0L
-            val totalDuration = state?.durationMs ?: 0L
-            var isUserSeeking by remember { mutableStateOf(false) }
-            var seekSliderValue by remember { mutableFloatStateOf(0f) }
-
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Slider(
-                        value = if (isUserSeeking) seekSliderValue else currentPos.toFloat(),
-                        onValueChange = {
-                            isUserSeeking = true
-                            seekSliderValue = it
-                        },
-                        onValueChangeFinished = {
-                            isUserSeeking = false
-                            viewModel.seekTo(seekSliderValue.toLong())
-                            triggerHaptic()
-                        },
-                        valueRange = 0f..maxOf(1f, totalDuration.toFloat()),
-                        modifier = Modifier.fillMaxWidth()
+            // Reconnect alert banner if not connected
+            AnimatedVisibility(visible = !isConnected) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.errorContainer)
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = if (isConnecting) "Reconnecting to TV..." else "Socket disconnected from TV",
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        style = MaterialTheme.typography.bodyMedium
                     )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            text = formatTime(if (isUserSeeking) seekSliderValue.toLong() else currentPos),
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                        Text(
-                            text = formatTime(totalDuration),
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-                }
-            }
-
-            // D-Pad Controller Section
-            Box(
-                modifier = Modifier
-                    .size(240.dp)
-                    .background(MaterialTheme.colorScheme.surfaceVariant, CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                // Top Button (Volume Up)
-                IconButton(
-                    onClick = {
-                        triggerHaptic()
-                        viewModel.adjustVolumeRelative(0.05f)
-                    },
-                    modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .padding(top = 10.dp)
-                ) {
-                    Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Volume Up", modifier = Modifier.size(32.dp))
-                }
-
-                // Bottom Button (Volume Down)
-                IconButton(
-                    onClick = {
-                        triggerHaptic()
-                        viewModel.adjustVolumeRelative(-0.05f)
-                    },
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(bottom = 10.dp)
-                ) {
-                    Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Volume Down", modifier = Modifier.size(32.dp))
-                }
-
-                // Left Button (Seek -10s)
-                IconButton(
-                    onClick = {
-                        triggerHaptic()
-                        viewModel.seekRelative(-10_000L)
-                    },
-                    modifier = Modifier
-                        .align(Alignment.CenterStart)
-                        .padding(start = 10.dp)
-                ) {
-                    Icon(Icons.Default.KeyboardArrowLeft, contentDescription = "Seek -10s", modifier = Modifier.size(32.dp))
-                }
-
-                // Right Button (Seek +10s)
-                IconButton(
-                    onClick = {
-                        triggerHaptic()
-                        viewModel.seekRelative(10_000L)
-                    },
-                    modifier = Modifier
-                        .align(Alignment.CenterEnd)
-                        .padding(end = 10.dp)
-                ) {
-                    Icon(Icons.Default.KeyboardArrowRight, contentDescription = "Seek +10s", modifier = Modifier.size(32.dp))
-                }
-
-                // Center Button (Play / Pause toggle)
-                FilledIconButton(
-                    onClick = {
-                        triggerHaptic()
-                        viewModel.togglePlayPause()
-                    },
-                    modifier = Modifier.size(72.dp),
-                    shape = CircleShape,
-                    colors = IconButtonDefaults.filledIconButtonColors(
-                        containerColor = MaterialTheme.colorScheme.primary
-                    )
-                ) {
-                    Icon(
-                        if (state?.isPlaying == true) Icons.Default.Pause else Icons.Default.PlayArrow,
-                        contentDescription = "Toggle Play/Pause",
-                        modifier = Modifier.size(36.dp)
-                    )
-                }
-            }
-
-            // Extended Transport Buttons (-30s, Stop, Play/Pause, +30s)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                OutlinedButton(onClick = {
-                    triggerHaptic()
-                    viewModel.seekRelative(-30_000L)
-                }) {
-                    Text("-30s")
-                }
-
-                OutlinedButton(onClick = {
-                    triggerHaptic()
-                    viewModel.seekRelative(-10_000L)
-                }) {
-                    Text("-10s")
-                }
-
-                Button(
-                    onClick = {
-                        triggerHaptic()
-                        viewModel.stop()
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                ) {
-                    Icon(Icons.Default.Stop, contentDescription = "Stop")
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Stop")
-                }
-
-                OutlinedButton(onClick = {
-                    triggerHaptic()
-                    viewModel.seekRelative(10_000L)
-                }) {
-                    Text("+10s")
-                }
-
-                OutlinedButton(onClick = {
-                    triggerHaptic()
-                    viewModel.seekRelative(30_000L)
-                }) {
-                    Text("+30s")
-                }
-            }
-
-            // Playback Speed Selector Chips
-            val currentSpeed = state?.speed ?: 1.0f
-            val speeds = listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                speeds.forEach { speed ->
-                    val isSelected = Math.abs(currentSpeed - speed) < 0.05f
-                    FilterChip(
-                        selected = isSelected,
+                    FilledTonalButton(
                         onClick = {
                             triggerHaptic()
-                            viewModel.setPlaybackSpeed(speed)
+                            viewModel.reconnect()
                         },
-                        label = { Text("${speed}x", style = MaterialTheme.typography.labelSmall) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer
-                        )
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                        modifier = Modifier.height(32.dp)
+                    ) {
+                        Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Reconnect", fontSize = 12.sp)
+                    }
+                }
+            }
+
+            // Ongoing or recent upload banner
+            if (uploadState !is UploadState.Idle) {
+                Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                    UploadProgressCard(
+                        uploadState = uploadState,
+                        onCancel = { viewModel.cancelUpload(context) },
+                        onDismiss = { viewModel.resetUploadState() }
                     )
                 }
             }
 
-            // Volume Control Section
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+            // Tab Selector
+            TabRow(
+                selectedTabIndex = selectedTab,
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Volume",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(modifier = Modifier.weight(1f))
-                        val vol = state?.volume ?: 0.5f
-                        Text(
-                            text = if (vol <= 0.001f) "Muted" else "${(vol * 100).toInt()}%",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = if (vol <= 0.001f) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        val currentVol = state?.volume ?: 0.5f
-                        val isMuted = currentVol <= 0.001f
-
-                        IconButton(onClick = {
-                            triggerHaptic()
-                            viewModel.toggleMute()
-                        }) {
-                            Icon(
-                                if (isMuted) Icons.Default.VolumeOff else Icons.Default.VolumeMute,
-                                contentDescription = if (isMuted) "Unmute" else "Mute",
-                                tint = if (isMuted) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
-                            )
+                Tab(
+                    selected = selectedTab == 0,
+                    onClick = {
+                        triggerHaptic()
+                        selectedTab = 0
+                    },
+                    icon = { Icon(Icons.Default.Navigation, contentDescription = null, modifier = Modifier.size(20.dp)) },
+                    text = { Text("Remote Pad") }
+                )
+                Tab(
+                    selected = selectedTab == 1,
+                    onClick = {
+                        triggerHaptic()
+                        selectedTab = 1
+                    },
+                    icon = { Icon(Icons.Default.Movie, contentDescription = null, modifier = Modifier.size(20.dp)) },
+                    text = { Text("Player") }
+                )
+                Tab(
+                    selected = selectedTab == 2,
+                    onClick = {
+                        triggerHaptic()
+                        selectedTab = 2
+                    },
+                    icon = {
+                        BadgedBox(
+                            badge = {
+                                if (logs.isNotEmpty()) {
+                                    Badge { Text(logs.size.toString()) }
+                                }
+                            }
+                        ) {
+                            Icon(Icons.Default.Terminal, contentDescription = null, modifier = Modifier.size(20.dp))
                         }
-
-                        Slider(
-                            value = state?.volume ?: 0.5f,
-                            onValueChange = { viewModel.onVolumeSliderChanged(it) },
-                            valueRange = 0f..1f,
-                            modifier = Modifier.weight(1f)
-                        )
-
-                        IconButton(onClick = {
-                            triggerHaptic()
-                            viewModel.onVolumeSliderChanged(1f)
-                        }) {
-                            Icon(Icons.Default.VolumeUp, contentDescription = "Max Volume")
-                        }
-                    }
-                }
+                    },
+                    text = { Text("TV Logs") }
+                )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            // Tab Contents
+            Box(modifier = Modifier.fillMaxSize()) {
+                when (selectedTab) {
+                    0 -> RemotePadTabContent(
+                        state = state,
+                        viewModel = viewModel,
+                        onTriggerHaptic = ::triggerHaptic
+                    )
+                    1 -> MediaPlayerTabContent(
+                        state = state,
+                        viewModel = viewModel,
+                        onTriggerHaptic = ::triggerHaptic,
+                        onOpenLoadDialog = { showLoadMediaDialog = true },
+                        onPickVideo = { videoPickerLauncher.launch(arrayOf("video/*")) }
+                    )
+                    2 -> TvLogsTabContent(
+                        logs = logs,
+                        onClearLogs = { viewModel.clearLogs() },
+                        onSendRawCommand = { type, payload -> viewModel.sendRawCommand(type, payload) },
+                        onTriggerHaptic = ::triggerHaptic
+                    )
+                }
+            }
         }
     }
 
     if (showLoadMediaDialog) {
         LoadMediaDialog(
             onDismiss = { showLoadMediaDialog = false },
-            onLoad = { url ->
-                viewModel.loadMedia(url)
+            onLoad = { url, title ->
+                viewModel.loadMedia(url, title)
                 showLoadMediaDialog = false
             }
         )
     }
+}
 
-    if (showDiagnosticsSheet) {
-        DiagnosticsBottomSheet(
-            eventLogs = eventLogs,
-            onDismiss = { showDiagnosticsSheet = false },
-            onSendRawCommand = { type, payload -> viewModel.sendRawCommand(type, payload) },
-            onClearLogs = { viewModel.clearLogs() }
-        )
+/**
+ * Tab 0: Modern Tactical D-Pad & TV Navigation
+ */
+@Composable
+private fun RemotePadTabContent(
+    state: PlayerStatePayload?,
+    viewModel: RemoteViewModel,
+    onTriggerHaptic: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp, vertical = 16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(20.dp)
+    ) {
+        // Navigation Action Buttons (Back, Home, Stop)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly
+        ) {
+            OutlinedButton(
+                onClick = {
+                    onTriggerHaptic()
+                    viewModel.sendBack()
+                },
+                modifier = Modifier.weight(1f).padding(horizontal = 4.dp),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Back")
+            }
+
+            OutlinedButton(
+                onClick = {
+                    onTriggerHaptic()
+                    viewModel.sendHome()
+                },
+                modifier = Modifier.weight(1f).padding(horizontal = 4.dp),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Icon(Icons.Default.Home, contentDescription = "Home")
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Home")
+            }
+
+            OutlinedButton(
+                onClick = {
+                    onTriggerHaptic()
+                    viewModel.stop()
+                },
+                modifier = Modifier.weight(1f).padding(horizontal = 4.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = MaterialTheme.colorScheme.error
+                )
+            ) {
+                Icon(Icons.Default.Stop, contentDescription = "Stop")
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Stop")
+            }
+        }
+
+        // Circular D-Pad Controller
+        Box(
+            modifier = Modifier
+                .size(260.dp)
+                .background(
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                    shape = CircleShape
+                )
+                .border(2.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            // UP
+            IconButton(
+                onClick = {
+                    onTriggerHaptic()
+                    viewModel.sendDpadUp()
+                },
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 12.dp)
+                    .size(56.dp)
+            ) {
+                Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Up", modifier = Modifier.size(36.dp))
+            }
+
+            // DOWN
+            IconButton(
+                onClick = {
+                    onTriggerHaptic()
+                    viewModel.sendDpadDown()
+                },
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 12.dp)
+                    .size(56.dp)
+            ) {
+                Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Down", modifier = Modifier.size(36.dp))
+            }
+
+            // LEFT
+            IconButton(
+                onClick = {
+                    onTriggerHaptic()
+                    viewModel.sendDpadLeft()
+                },
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .padding(start = 12.dp)
+                    .size(56.dp)
+            ) {
+                Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Left", modifier = Modifier.size(36.dp))
+            }
+
+            // RIGHT
+            IconButton(
+                onClick = {
+                    onTriggerHaptic()
+                    viewModel.sendDpadRight()
+                },
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 12.dp)
+                    .size(56.dp)
+            ) {
+                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Right", modifier = Modifier.size(36.dp))
+            }
+
+            // CENTER OK / SELECT
+            FilledIconButton(
+                onClick = {
+                    onTriggerHaptic()
+                    viewModel.sendDpadCenter()
+                },
+                modifier = Modifier.size(80.dp),
+                shape = CircleShape,
+                colors = IconButtonDefaults.filledIconButtonColors(
+                    containerColor = MaterialTheme.colorScheme.primary
+                )
+            ) {
+                Text(
+                    text = "OK",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onPrimary
+                )
+            }
+        }
+
+        // Quick Volume & Mute Row
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            )
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "TV Volume",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(
+                        onClick = {
+                            onTriggerHaptic()
+                            viewModel.adjustVolumeRelative(-0.05f)
+                        }
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.VolumeDown, contentDescription = "Volume Down")
+                    }
+
+                    IconButton(
+                        onClick = {
+                            onTriggerHaptic()
+                            viewModel.toggleMute()
+                        }
+                    ) {
+                        val isMuted = (state?.volume ?: 0.5f) == 0f
+                        Icon(
+                            if (isMuted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeMute,
+                            contentDescription = "Mute Toggle",
+                            tint = if (isMuted) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+
+                    IconButton(
+                        onClick = {
+                            onTriggerHaptic()
+                            viewModel.adjustVolumeRelative(0.05f)
+                        }
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = "Volume Up")
+                    }
+                }
+            }
+        }
+
+        // Mini Playback Transport Row (Quick Play / Pause / Seek)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            OutlinedButton(
+                onClick = {
+                    onTriggerHaptic()
+                    viewModel.seekRelative(-10_000L)
+                },
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Icon(Icons.Default.FastRewind, contentDescription = null)
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("-10s")
+            }
+
+            Button(
+                onClick = {
+                    onTriggerHaptic()
+                    viewModel.togglePlayPause()
+                },
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary
+                )
+            ) {
+                Icon(
+                    if (state?.isPlaying == true) Icons.Default.Pause else Icons.Default.PlayArrow,
+                    contentDescription = null
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(if (state?.isPlaying == true) "Pause" else "Play")
+            }
+
+            OutlinedButton(
+                onClick = {
+                    onTriggerHaptic()
+                    viewModel.seekRelative(10_000L)
+                },
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text("+10s")
+                Spacer(modifier = Modifier.width(4.dp))
+                Icon(Icons.Default.FastForward, contentDescription = null)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+    }
+}
+
+/**
+ * Tab 1: Enhanced Media Player & Scrubber Control
+ */
+@Composable
+private fun MediaPlayerTabContent(
+    state: PlayerStatePayload?,
+    viewModel: RemoteViewModel,
+    onTriggerHaptic: () -> Unit,
+    onOpenLoadDialog: () -> Unit,
+    onPickVideo: () -> Unit
+) {
+    val currentPos = (state?.positionMs ?: 0L).coerceAtLeast(0L)
+    val totalDuration = (state?.durationMs ?: 0L).coerceAtLeast(0L)
+    val maxSliderRange = maxOf(1f, totalDuration.toFloat())
+
+    var isUserSeeking by remember { mutableStateOf(false) }
+    var seekSliderValue by remember { mutableFloatStateOf(0f) }
+
+    val rawSliderValue = if (isUserSeeking) seekSliderValue else currentPos.toFloat()
+    val safeSliderValue = rawSliderValue.coerceIn(0f, maxSliderRange)
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp, vertical = 16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // Status & Scrubber Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            )
+        ) {
+            Column(modifier = Modifier.padding(20.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "TV Media Stream",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Box(
+                        modifier = Modifier
+                            .background(
+                                color = if (state?.isPlaying == true) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+                                shape = RoundedCornerShape(8.dp)
+                            )
+                            .padding(horizontal = 10.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = if (state?.isPlaying == true) "Playing" else "Paused",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = if (state?.isPlaying == true) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Seek Slider with safe range clamping
+                Slider(
+                    value = safeSliderValue,
+                    onValueChange = {
+                        isUserSeeking = true
+                        seekSliderValue = it.coerceIn(0f, maxSliderRange)
+                    },
+                    onValueChangeFinished = {
+                        isUserSeeking = false
+                        viewModel.seekTo(seekSliderValue.toLong())
+                        onTriggerHaptic()
+                    },
+                    valueRange = 0f..maxSliderRange,
+                    enabled = totalDuration > 0L,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = formatTime(if (isUserSeeking) seekSliderValue.toLong() else currentPos),
+                        style = MaterialTheme.typography.bodySmall,
+                        fontFamily = FontFamily.Monospace
+                    )
+                    Text(
+                        text = formatTime(totalDuration),
+                        style = MaterialTheme.typography.bodySmall,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+            }
+        }
+
+        // Transport Controls Row (10s seek, 30s seek, play/pause, stop)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            FilledIconButton(
+                onClick = {
+                    onTriggerHaptic()
+                    viewModel.seekRelative(-30_000L)
+                },
+                modifier = Modifier.size(46.dp),
+                shape = CircleShape
+            ) {
+                Text("-30", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+            }
+
+            FilledIconButton(
+                onClick = {
+                    onTriggerHaptic()
+                    viewModel.seekRelative(-10_000L)
+                },
+                modifier = Modifier.size(48.dp),
+                shape = CircleShape
+            ) {
+                Icon(Icons.Default.FastRewind, contentDescription = "Rewind 10s")
+            }
+
+            FilledIconButton(
+                onClick = {
+                    onTriggerHaptic()
+                    viewModel.togglePlayPause()
+                },
+                modifier = Modifier.size(68.dp),
+                shape = CircleShape,
+                colors = IconButtonDefaults.filledIconButtonColors(
+                    containerColor = MaterialTheme.colorScheme.primary
+                )
+            ) {
+                Icon(
+                    if (state?.isPlaying == true) Icons.Default.Pause else Icons.Default.PlayArrow,
+                    contentDescription = "Play/Pause",
+                    modifier = Modifier.size(36.dp)
+                )
+            }
+
+            FilledIconButton(
+                onClick = {
+                    onTriggerHaptic()
+                    viewModel.seekRelative(10_000L)
+                },
+                modifier = Modifier.size(48.dp),
+                shape = CircleShape
+            ) {
+                Icon(Icons.Default.FastForward, contentDescription = "Forward 10s")
+            }
+
+            FilledIconButton(
+                onClick = {
+                    onTriggerHaptic()
+                    viewModel.seekRelative(30_000L)
+                },
+                modifier = Modifier.size(46.dp),
+                shape = CircleShape
+            ) {
+                Text("+30", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+            }
+
+            FilledIconButton(
+                onClick = {
+                    onTriggerHaptic()
+                    viewModel.stop()
+                },
+                modifier = Modifier.size(48.dp),
+                shape = CircleShape,
+                colors = IconButtonDefaults.filledIconButtonColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer,
+                    contentColor = MaterialTheme.colorScheme.onErrorContainer
+                )
+            ) {
+                Icon(Icons.Default.Stop, contentDescription = "Stop")
+            }
+        }
+
+        // Playback Speed Selector Chips
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Text(
+                text = "Playback Speed",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                val speeds = listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f)
+                val currentSpeed = state?.speed ?: 1.0f
+                speeds.forEach { speed ->
+                    FilterChip(
+                        selected = abs(currentSpeed - speed) < 0.05f,
+                        onClick = {
+                            onTriggerHaptic()
+                            viewModel.setPlaybackSpeed(speed)
+                        },
+                        label = { Text("${speed}x") }
+                    )
+                }
+            }
+        }
+
+        // Full Volume Control Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            )
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Volume",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.weight(1f))
+                    val currentVol = state?.volume ?: 0.5f
+                    Text(
+                        text = "${(currentVol * 100).toInt()}%",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(
+                        onClick = {
+                            onTriggerHaptic()
+                            viewModel.toggleMute()
+                        }
+                    ) {
+                        val isMuted = (state?.volume ?: 0.5f) == 0f
+                        Icon(
+                            if (isMuted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeMute,
+                            contentDescription = "Mute",
+                            tint = if (isMuted) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+
+                    Slider(
+                        value = (state?.volume ?: 0.5f).coerceIn(0f, 1f),
+                        onValueChange = { viewModel.onVolumeSliderChanged(it) },
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    IconButton(
+                        onClick = {
+                            onTriggerHaptic()
+                            viewModel.adjustVolumeRelative(0.1f)
+                        }
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = "Volume Up")
+                    }
+                }
+            }
+        }
+
+        // Media Stream & Upload Actions Row
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Button(
+                onClick = {
+                    onTriggerHaptic()
+                    onOpenLoadDialog()
+                },
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Icon(Icons.Default.Link, contentDescription = null)
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Stream URL")
+            }
+
+            OutlinedButton(
+                onClick = {
+                    onTriggerHaptic()
+                    onPickVideo()
+                },
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Icon(Icons.Default.CloudUpload, contentDescription = null)
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Upload Video")
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+    }
+}
+
+/**
+ * Tab 2: Real-Time TV Diagnostics, Raw Command Sender & WebSocket Logs
+ */
+@Composable
+private fun TvLogsTabContent(
+    logs: List<RemoteLogEntry>,
+    onClearLogs: () -> Unit,
+    onSendRawCommand: (String, String) -> Unit,
+    onTriggerHaptic: () -> Unit
+) {
+    val context = LocalContext.current
+    val clipboardManager = LocalClipboardManager.current
+    var selectedFilter by remember { mutableStateOf<LogDirection?>(null) }
+    var rawType by remember { mutableStateOf("COMMAND") }
+    var rawPayload by remember { mutableStateOf("{\"action\":\"PLAY\"}") }
+
+    val filteredLogs = remember(logs, selectedFilter) {
+        if (selectedFilter == null) logs
+        else logs.filter { it.direction == selectedFilter }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp, vertical = 12.dp)
+    ) {
+        // Raw Command Sender
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+        ) {
+            Column(modifier = Modifier.padding(10.dp)) {
+                Text("Send Raw WebSocket Frame", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedTextField(
+                        value = rawType,
+                        onValueChange = { rawType = it },
+                        label = { Text("Type") },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = rawPayload,
+                        onValueChange = { rawPayload = it },
+                        label = { Text("Payload") },
+                        modifier = Modifier.weight(2f),
+                        singleLine = true
+                    )
+                    IconButton(
+                        onClick = {
+                            onTriggerHaptic()
+                            onSendRawCommand(rawType, rawPayload)
+                        }
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send")
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Logs Header Bar
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Console Logs (${filteredLogs.size})",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+
+            Row {
+                IconButton(
+                    onClick = {
+                        onTriggerHaptic()
+                        val dump = logs.joinToString("\n") {
+                            "[${it.timestamp}] [${it.direction}] ${it.type}: ${it.payload}"
+                        }
+                        clipboardManager.setText(AnnotatedString(dump))
+                        Toast.makeText(context, "Copied ${logs.size} log entries", Toast.LENGTH_SHORT).show()
+                    },
+                    enabled = logs.isNotEmpty()
+                ) {
+                    Icon(Icons.Default.Link, contentDescription = "Copy Dump")
+                }
+
+                IconButton(
+                    onClick = {
+                        onTriggerHaptic()
+                        onClearLogs()
+                    },
+                    enabled = logs.isNotEmpty()
+                ) {
+                    Icon(
+                        Icons.Default.DeleteSweep,
+                        contentDescription = "Clear Logs",
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+        }
+
+        // Filter Chips Row
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            FilterChip(
+                selected = selectedFilter == null,
+                onClick = {
+                    onTriggerHaptic()
+                    selectedFilter = null
+                },
+                label = { Text("All (${logs.size})") }
+            )
+            FilterChip(
+                selected = selectedFilter == LogDirection.REQUEST,
+                onClick = {
+                    onTriggerHaptic()
+                    selectedFilter = if (selectedFilter == LogDirection.REQUEST) null else LogDirection.REQUEST
+                },
+                label = { Text("Requests ⬆️") }
+            )
+            FilterChip(
+                selected = selectedFilter == LogDirection.RESPONSE,
+                onClick = {
+                    onTriggerHaptic()
+                    selectedFilter = if (selectedFilter == LogDirection.RESPONSE) null else LogDirection.RESPONSE
+                },
+                label = { Text("Responses ⬇️") }
+            )
+            FilterChip(
+                selected = selectedFilter == LogDirection.STATE,
+                onClick = {
+                    onTriggerHaptic()
+                    selectedFilter = if (selectedFilter == LogDirection.STATE) null else LogDirection.STATE
+                },
+                label = { Text("State 📺") }
+            )
+            FilterChip(
+                selected = selectedFilter == LogDirection.SYSTEM,
+                onClick = {
+                    onTriggerHaptic()
+                    selectedFilter = if (selectedFilter == LogDirection.SYSTEM) null else LogDirection.SYSTEM
+                },
+                label = { Text("System ℹ️") }
+            )
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        if (filteredLogs.isEmpty()) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = if (logs.isEmpty()) "No traffic recorded yet.\nInteract with the remote to see real-time requests & responses." else "No logs match the selected filter.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(filteredLogs, key = { it.id }) { entry ->
+                    LogEntryCard(entry = entry)
+                }
+            }
+        }
     }
 }
 
 @Composable
-private fun UploadStatusCard(
+private fun LogEntryCard(entry: RemoteLogEntry) {
+    val (badgeBg, badgeFg, label) = when (entry.direction) {
+        LogDirection.REQUEST, LogDirection.OUTGOING -> Triple(Color(0xFFE8F5E9), Color(0xFF2E7D32), "REQ ⬆️")
+        LogDirection.RESPONSE, LogDirection.INCOMING -> Triple(Color(0xFFE3F2FD), Color(0xFF1565C0), "RESP ⬇️")
+        LogDirection.STATE -> Triple(Color(0xFFEDE7F6), Color(0xFF512DA8), "STATE 📺")
+        LogDirection.SYSTEM -> if (entry.isSuccess) {
+            Triple(Color(0xFFFFF3E0), Color(0xFFE65100), "SYS ℹ️")
+        } else {
+            Triple(Color(0xFFFFEBEE), Color(0xFFC62828), "ERR ❌")
+        }
+        LogDirection.ERROR -> Triple(Color(0xFFFFEBEE), Color(0xFFC62828), "ERR ❌")
+    }
+
+    OutlinedCard(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(10.dp),
+        colors = CardDefaults.outlinedCardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        )
+    ) {
+        Column(modifier = Modifier.padding(10.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .background(badgeBg, RoundedCornerShape(6.dp))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = label,
+                            color = badgeFg,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = entry.type,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+                Text(
+                    text = entry.timestamp,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontFamily = FontFamily.Monospace
+                )
+            }
+
+            if (entry.payload.isNotBlank()) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            RoundedCornerShape(6.dp)
+                        )
+                        .padding(6.dp)
+                ) {
+                    Text(
+                        text = entry.payload,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun UploadProgressCard(
     uploadState: UploadState,
     onCancel: () -> Unit,
     onDismiss: () -> Unit
@@ -462,39 +1209,34 @@ private fun UploadStatusCard(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
             ) {
                 Column(modifier = Modifier.padding(12.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = "Uploading: ${uploadState.fileName}",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Text(
-                            text = "${(uploadState.progress * 100).toInt()}%",
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(6.dp))
-                    LinearProgressIndicator(
-                        progress = { uploadState.progress },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        val mbUploaded = uploadState.bytesUploaded / (1024 * 1024)
-                        val mbTotal = uploadState.totalBytes / (1024 * 1024)
                         Text(
-                            text = "$mbUploaded MB / $mbTotal MB",
-                            style = MaterialTheme.typography.labelSmall
+                            text = "Uploading: ${uploadState.fileName}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.weight(1f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                         TextButton(onClick = onCancel) {
                             Text("Cancel", color = MaterialTheme.colorScheme.error)
                         }
                     }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    LinearProgressIndicator(
+                        progress = { uploadState.progress },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "${(uploadState.progress * 100).toInt()}% • ${uploadState.bytesUploaded / (1024 * 1024)}MB / ${uploadState.totalBytes / (1024 * 1024)}MB",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
                 }
             }
         }
@@ -548,219 +1290,85 @@ private fun UploadStatusCard(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun DiagnosticsBottomSheet(
-    eventLogs: List<LogEvent>,
-    onDismiss: () -> Unit,
-    onSendRawCommand: (String, String) -> Unit,
-    onClearLogs: () -> Unit
-) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val listState = rememberLazyListState()
-    var rawType by remember { mutableStateOf("COMMAND") }
-    var rawPayload by remember { mutableStateOf("{\"action\":\"PLAY\"}") }
-
-    LaunchedEffect(eventLogs.size) {
-        if (eventLogs.isNotEmpty()) {
-            listState.animateScrollToItem(eventLogs.size - 1)
-        }
-    }
-
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Live Diagnostics & Console",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                TextButton(onClick = onClearLogs) {
-                    Text("Clear Logs")
-                }
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Raw Command Dispatcher
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-            ) {
-                Column(modifier = Modifier.padding(12.dp)) {
-                    Text("Send Raw WebSocket Frame", style = MaterialTheme.typography.labelSmall)
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        OutlinedTextField(
-                            value = rawType,
-                            onValueChange = { rawType = it },
-                            label = { Text("Type") },
-                            modifier = Modifier.weight(1f),
-                            singleLine = true
-                        )
-                        OutlinedTextField(
-                            value = rawPayload,
-                            onValueChange = { rawPayload = it },
-                            label = { Text("Payload") },
-                            modifier = Modifier.weight(2f),
-                            singleLine = true
-                        )
-                        IconButton(
-                            onClick = {
-                                onSendRawCommand(rawType, rawPayload)
-                            },
-                            modifier = Modifier.align(Alignment.CenterVertically)
-                        ) {
-                            Icon(Icons.Default.Send, contentDescription = "Send")
-                        }
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Log Console Window
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(280.dp),
-                shape = RoundedCornerShape(8.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-            ) {
-                if (eventLogs.isEmpty()) {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("No traffic events logged yet", style = MaterialTheme.typography.bodySmall)
-                    }
-                } else {
-                    LazyColumn(
-                        state = listState,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(8.dp)
-                    ) {
-                        items(eventLogs, key = { it.id }) { log ->
-                            LogItemRow(log = log)
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun LogItemRow(log: LogEvent) {
-    val timeFormat = remember { SimpleDateFormat("HH:mm:ss.SSS", Locale.getDefault()) }
-    val timeStr = remember(log.timestamp) { timeFormat.format(Date(log.timestamp)) }
-
-    val color = when (log.direction) {
-        LogDirection.INCOMING -> MaterialTheme.colorScheme.primary
-        LogDirection.OUTGOING -> MaterialTheme.colorScheme.tertiary
-        LogDirection.ERROR -> MaterialTheme.colorScheme.error
-        LogDirection.SYSTEM -> MaterialTheme.colorScheme.outline
-    }
-
-    val dirSymbol = when (log.direction) {
-        LogDirection.INCOMING -> "◄ [RX]"
-        LogDirection.OUTGOING -> "► [TX]"
-        LogDirection.ERROR -> "✖ [ERR]"
-        LogDirection.SYSTEM -> "ℹ [SYS]"
-    }
-
-    Column(modifier = Modifier.padding(vertical = 2.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text(
-                text = "$dirSymbol ${log.tag}",
-                color = color,
-                fontFamily = FontFamily.Monospace,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                text = timeStr,
-                color = MaterialTheme.colorScheme.outline,
-                fontFamily = FontFamily.Monospace,
-                fontSize = 10.sp
-            )
-        }
-        Text(
-            text = log.message,
-            color = MaterialTheme.colorScheme.onSurface,
-            fontFamily = FontFamily.Monospace,
-            fontSize = 11.sp
-        )
-    }
-}
-
 @Composable
 fun LoadMediaDialog(
     onDismiss: () -> Unit,
-    onLoad: (String) -> Unit
+    onLoad: (url: String, title: String?) -> Unit
 ) {
     var urlInput by remember {
         mutableStateOf("https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4")
     }
+    var titleInput by remember { mutableStateOf("Big Buck Bunny") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Stream Media to TV") },
         text = {
             Column {
-                Text("Enter a direct video URL (MP4 / HLS):")
+                Text(
+                    "Enter a direct MP4 / HLS video stream URL to play instantly on your TV screen:",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = titleInput,
+                    onValueChange = { titleInput = it },
+                    label = { Text("Media Title") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(
                     value = urlInput,
                     onValueChange = { urlInput = it },
-                    label = { Text("Video URL") },
+                    label = { Text("Video URL (HTTPS)") },
                     singleLine = false,
                     maxLines = 3,
                     modifier = Modifier.fillMaxWidth()
                 )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text("Quick Samples:", style = MaterialTheme.typography.labelSmall)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Text("Sample Presets:", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
                     SuggestionChip(
                         onClick = {
+                            titleInput = "Big Buck Bunny"
                             urlInput = "https://storage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
                         },
-                        label = { Text("Big Buck Bunny") }
+                        label = { Text("🐰 Bunny") }
                     )
                     SuggestionChip(
                         onClick = {
+                            titleInput = "Elephant's Dream"
                             urlInput = "https://storage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4"
                         },
-                        label = { Text("Elephant's Dream") }
+                        label = { Text("🐘 Dream") }
+                    )
+                    SuggestionChip(
+                        onClick = {
+                            titleInput = "Tears of Steel"
+                            urlInput = "https://storage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4"
+                        },
+                        label = { Text("🚀 Sci-Fi") }
                     )
                 }
             }
         },
         confirmButton = {
             Button(
-                onClick = { onLoad(urlInput) },
+                onClick = { onLoad(urlInput.trim(), titleInput.trim()) },
                 enabled = urlInput.isNotBlank()
             ) {
                 Text("Play on TV")
             }
         },
         dismissButton = {
-            Button(onClick = onDismiss) {
+            OutlinedButton(onClick = onDismiss) {
                 Text("Cancel")
             }
         }

@@ -41,9 +41,7 @@ android {
         kotlinCompilerExtensionVersion = "1.5.8"
     }
     testOptions {
-        unitTests {
-            isReturnDefaultValues = true
-        }
+        unitTests.isReturnDefaultValues = true
     }
 }
 
