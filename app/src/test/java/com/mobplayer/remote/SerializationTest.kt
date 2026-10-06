@@ -93,5 +93,53 @@ class SerializationTest {
         assertEquals(1000L, decoded.positionMs)
         assertEquals(0L, decoded.durationMs)
         assertEquals(1.0f, decoded.volume, 0.001f)
+        assertEquals(1.0f, decoded.speed, 0.001f)
+    }
+
+    @Test
+    fun testPlayerCommandPayloadStop() {
+        val stopCommand = PlayerCommandPayload(action = "STOP")
+        val encoded = json.encodeToString(stopCommand)
+        val decoded = json.decodeFromString<PlayerCommandPayload>(encoded)
+        assertEquals("STOP", decoded.action)
+        assertNull(decoded.seekToMs)
+        assertNull(decoded.volume)
+        assertNull(decoded.speed)
+    }
+
+    @Test
+    fun testPlayerCommandPayloadSetSpeed() {
+        val speedCommand = PlayerCommandPayload(action = "SET_SPEED", speed = 1.75f)
+        val encoded = json.encodeToString(speedCommand)
+        val decoded = json.decodeFromString<PlayerCommandPayload>(encoded)
+        assertEquals("SET_SPEED", decoded.action)
+        assertEquals(1.75f, decoded.speed ?: 1.0f, 0.001f)
+    }
+
+    @Test
+    fun testPlayerStatePayloadWithSpeed() {
+        val rawJson = """
+            {
+                "isPlaying": true,
+                "positionMs": 15000,
+                "durationMs": 120000,
+                "volume": 0.6,
+                "speed": 1.5
+            }
+        """.trimIndent()
+
+        val decoded = json.decodeFromString<PlayerStatePayload>(rawJson)
+        assertTrue(decoded.isPlaying)
+        assertEquals(15000L, decoded.positionMs)
+        assertEquals(120000L, decoded.durationMs)
+        assertEquals(0.6f, decoded.volume, 0.001f)
+        assertEquals(1.5f, decoded.speed, 0.001f)
+    }
+
+    @Test
+    fun testTvDeviceHttpBaseUrl() {
+        val device = com.mobplayer.remote.model.TvDevice("Living Room TV", "192.168.1.50", 8080)
+        assertEquals("ws://192.168.1.50:8080/control", device.endpointUrl)
+        assertEquals("http://192.168.1.50:8080", device.httpBaseUrl)
     }
 }

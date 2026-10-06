@@ -57,16 +57,28 @@ MobPlayer Remote is a companion Android mobile application designed to discover,
   7. On error or TV user rejection (`AUTH_FAILED`), displays a descriptive message (`"Invalid PIN"` or `"Connection rejected by TV"`).
 
 ### 2.4. Playback Controls & State Sync (`RemoteViewModel.kt`)
-- **Continuous State Sync:** Consumes incoming `STATE_UPDATE` broadcasts from TV and decodes `PlayerStatePayload` (`isPlaying`, `positionMs`, `durationMs`, `volume`).
+- **Continuous State Sync:** Consumes incoming `STATE_UPDATE` broadcasts from TV and decodes `PlayerStatePayload` (`isPlaying`, `positionMs`, `durationMs`, `volume`, `speed`).
 - **Interactive Scrubber:** Playback timeline slider dynamically mapped to `0..durationMs` displaying formatted elapsed/total time (`mm:ss / mm:ss`).
-- **Debounced Volume Control:** Compose slider backed by a coroutine `debounce(50L)` pipeline to prevent WebSocket frame congestion while retaining optimistic local UI response.
+- **Debounced Volume & Mute:** Compose slider backed by a coroutine `debounce(50L)` pipeline. Includes dedicated `toggleMute()` restoring previous volume on unmute.
+- **Extended Transport Controls:** Full support for `PLAY`, `PAUSE`, `STOP`, and relative seeking with $\pm 10\text{s}$ and $\pm 30\text{s}$ shortcuts.
+- **Playback Speed Selector:** Dynamic rate switching between $0.5\times$, $0.75\times$, $1.0\times$, $1.25\times$, $1.5\times$, $2.0\times$ via `SET_SPEED`.
 - **D-Pad & Navigation:**
   - Center: Toggle Play/Pause
   - Left / Right: Seek relative $\pm 10\text{s}$
   - Up / Down: Adjust volume relative $\pm 5\%$
 - **Media Caster:** Dialog allowing user to send direct video streaming URLs (MP4 / HLS / DASH) to the TV via `LOAD_MEDIA`.
 
-### 2.5. Lifecycle & Keepalive Management (`MainActivity.kt`)
+### 2.5. Local Video Upload Service (`VideoUploadService.kt` & `MediaUploadForegroundService.kt`)
+- **Native SAF Video Picker:** `ActivityResultContracts.GetContent("video/*")` allows picking local files without broad runtime storage permissions.
+- **Memory-Safe Chunked Streaming:** Streams input streams to `http://<TV_IP>:8080/upload` using Ktor Client without buffering large files in RAM, preventing `OutOfMemoryError`.
+- **Foreground Service Execution:** `MediaUploadForegroundService` runs with `foregroundServiceType="dataSync"`, holding a Wi-Fi wake lock and posting a live progress bar notification with cancel actions.
+- **Reactive State Flow:** Emits `UploadState` (`Idle`, `Uploading`, `Success`, `Error`) consumed simultaneously by Compose UI and the system notification drawer.
+
+### 2.6. Real-Time Diagnostics & WebSocket Terminal (`RemoteControlScreen.kt`)
+- **Live Traffic Tap:** `ControlSocketRepository` exposes `trafficLogs: SharedFlow<LogEvent>` capturing raw inbound/outbound WebSocket frames.
+- **Diagnostics Bottom Sheet:** Scrollable terminal window displaying timestamped, color-coded frames with custom command dispatch capabilities.
+
+### 2.7. Lifecycle & Keepalive Management (`MainActivity.kt`)
 - Implements `LifecycleEventObserver` to monitor app backgrounding.
 - On `ON_STOP`: launches a 3-minute grace timer. If the user does not resume within 3 minutes, closes the WebSocket cleanly (Code 1000) to preserve phone battery and free up the TV's single-controller slot.
 - On `ON_START`: cancels the timer and keeps the active session alive.
@@ -87,9 +99,10 @@ MobPlayer Remote is a companion Android mobile application designed to discover,
 - **`PlayerCommandPayload`**:
   ```json
   {
-    "action": "PLAY | PAUSE | SEEK | SET_VOLUME",
+    "action": "PLAY | PAUSE | STOP | SEEK | SET_VOLUME | SET_SPEED",
     "seekToMs": 120000,
-    "volume": 0.85
+    "volume": 0.85,
+    "speed": 1.25
   }
   ```
 - **`PlayerStatePayload`**:
@@ -98,9 +111,15 @@ MobPlayer Remote is a companion Android mobile application designed to discover,
     "isPlaying": true,
     "positionMs": 34520,
     "durationMs": 180000,
-    "volume": 0.85
+    "volume": 0.85,
+    "speed": 1.0
   }
   ```
+- **`UploadState`**:
+  - `Idle`
+  - `Uploading(progress: Float, bytesUploaded: Long, totalBytes: Long, fileName: String)`
+  - `Success(fileName: String, message: String)`
+  - `Error(errorMessage: String)`
 
 ---
 
@@ -113,7 +132,8 @@ MobPlayer Remote is a companion Android mobile application designed to discover,
 | `PIN_SUBMIT` | Remote -> TV | 4-digit PIN string (e.g. `"1234"`) | Submit PIN displayed on TV UI |
 | `AUTH_SUCCESS` | TV -> Remote | UUID Token string | Authentication successful; save token |
 | `AUTH_FAILED` | TV -> Remote | `"Invalid PIN"` or `"Connection rejected by TV"` | Auth failed or denied; connection closed |
-| `COMMAND` | Remote -> TV | `{"action":"PLAY\|PAUSE\|SEEK\|SET_VOLUME", "seekToMs": Long?, "volume": Float?}` | Control playback or volume actions |
+| `COMMAND` | Remote -> TV | `{"action":"PLAY\|PAUSE\|STOP\|SEEK\|SET_VOLUME\|SET_SPEED", "seekToMs": Long?, "volume": Float?, "speed": Float?}` | Control playback, volume, or playback speed |
 | `LOAD_MEDIA` | Remote -> TV | Video URL string | Stream new media item |
 | `COMMAND_SUCCESS` | TV -> Remote | Action string | Acknowledgment of executed command |
-| `STATE_UPDATE` | TV -> Remote | `{"isPlaying": Boolean, "positionMs": Long, "durationMs": Long, "volume": Float}` | Real-time state broadcast from TV ExoPlayer |
+| `STATE_UPDATE` | TV -> Remote | `{"isPlaying": Boolean, "positionMs": Long, "durationMs": Long, "volume": Float, "speed": Float}` | Real-time state broadcast from TV ExoPlayer |
+| `POST /upload` (HTTP) | Remote -> TV | Multipart Form (`video/*`, `fileName`) | Upload video file to TV storage |

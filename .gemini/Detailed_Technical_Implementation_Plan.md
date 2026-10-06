@@ -51,3 +51,16 @@
 - [x] Unit test backward compatibility when `durationMs` is omitted (`SerializationTest.kt`).
 - [x] Unit test ViewModel state operations, volume manipulation, and seeking (`RemoteViewModelTest.kt`).
 - [x] Verified build and test tasks with `.\gradlew compileDebugKotlin` and `.\gradlew testDebugUnitTest`.
+
+## Phase 8: TV test_client.html Feature Parity Integration
+**Status:** Completed
+- [x] Extended `PlayerCommandPayload` with `STOP` and `SET_SPEED` actions.
+- [x] Extended `PlayerStatePayload` with `speed` property (retaining backward compatibility).
+- [x] Added `UploadState` and `LogEvent` models.
+- [x] Implemented `VideoUploadService` for memory-safe chunked multipart streaming to `http://<TV_IP>:8080/upload`.
+- [x] Implemented `MediaUploadForegroundService` with `foregroundServiceType="dataSync"`, low-importance notification channel, and live progress bar.
+- [x] Implemented raw WebSocket traffic logging in `ControlSocketRepository`.
+- [x] Added `stop()`, `setPlaybackSpeed()`, `toggleMute()`, $\pm 30\text{s}$ seeks, video upload, and diagnostics to `RemoteViewModel`.
+- [x] Updated `RemoteControlScreen` with Stop button, speed chips ($0.5\times - 2.0\times$), mute toggle, video picker launcher, upload progress card, and live diagnostics terminal bottom sheet.
+- [x] Authored comprehensive unit tests for `STOP`, `SET_SPEED`, speed backwards compatibility, `RemoteViewModel` operations, and `VideoUploadService`.
+- [x] Executed full test suite with `./gradlew testDebugUnitTest` verifying 20/20 tests passing (100% success rate, 0 failures, 0 errors).

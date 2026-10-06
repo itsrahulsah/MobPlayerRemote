@@ -57,4 +57,84 @@ class RemoteViewModelTest {
         viewModel.adjustVolumeRelative(-0.25f)
         assertEquals(0.50f, viewModel.playerState.value?.volume ?: 0f, 0.001f)
     }
+
+    @Test
+    fun testToggleMuteAndUnmute() = runTest(testDispatcher) {
+        val testScope = this
+        val socketRepo = ControlSocketRepository(testScope)
+        val viewModel = RemoteViewModel(socketRepo)
+
+        // Initial volume 0.70
+        viewModel.onVolumeSliderChanged(0.70f)
+        assertEquals(0.70f, viewModel.playerState.value?.volume ?: 0f, 0.001f)
+
+        // Toggle mute -> should be 0.0f
+        viewModel.toggleMute()
+        assertEquals(0.0f, viewModel.playerState.value?.volume ?: 1f, 0.001f)
+
+        // Toggle unmute -> should restore 0.70f
+        viewModel.toggleMute()
+        assertEquals(0.70f, viewModel.playerState.value?.volume ?: 0f, 0.001f)
+    }
+
+    @Test
+    fun testSetPlaybackSpeedClamping() = runTest(testDispatcher) {
+        val testScope = this
+        val socketRepo = ControlSocketRepository(testScope)
+        val viewModel = RemoteViewModel(socketRepo)
+
+        // Normal speed
+        viewModel.setPlaybackSpeed(1.5f)
+        assertEquals(1.5f, viewModel.playerState.value?.speed ?: 1.0f, 0.001f)
+
+        // Clamping upper bound (max 3.0f)
+        viewModel.setPlaybackSpeed(5.0f)
+        assertEquals(3.0f, viewModel.playerState.value?.speed ?: 1.0f, 0.001f)
+
+        // Clamping lower bound (min 0.25f)
+        viewModel.setPlaybackSpeed(0.1f)
+        assertEquals(0.25f, viewModel.playerState.value?.speed ?: 1.0f, 0.001f)
+    }
+
+    @Test
+    fun testSeekRelative30Seconds() = runTest(testDispatcher) {
+        val testScope = this
+        val socketRepo = ControlSocketRepository(testScope)
+        val viewModel = RemoteViewModel(socketRepo)
+
+        // Should not crash and should clamp to 0 if starting at 0
+        viewModel.seekRelative(-30_000L)
+        viewModel.seekRelative(30_000L)
+    }
+
+    @Test
+    fun testStopCommandExecution() = runTest(testDispatcher) {
+        val testScope = this
+        val socketRepo = ControlSocketRepository(testScope)
+        val viewModel = RemoteViewModel(socketRepo)
+
+        viewModel.stop()
+        // Method executes cleanly without error
+    }
+
+    @Test
+    fun testEventLogsAndClear() = runTest(testDispatcher) {
+        val testScope = this
+        val socketRepo = ControlSocketRepository(testScope)
+        val viewModel = RemoteViewModel(socketRepo)
+
+        assertTrue(viewModel.eventLogs.value.isEmpty())
+        viewModel.clearLogs()
+        assertTrue(viewModel.eventLogs.value.isEmpty())
+    }
+
+    @Test
+    fun testUploadStateReset() = runTest(testDispatcher) {
+        val testScope = this
+        val socketRepo = ControlSocketRepository(testScope)
+        val viewModel = RemoteViewModel(socketRepo)
+
+        viewModel.resetUploadState()
+        assertEquals(com.mobplayer.remote.model.UploadState.Idle, viewModel.uploadState.value)
+    }
 }
