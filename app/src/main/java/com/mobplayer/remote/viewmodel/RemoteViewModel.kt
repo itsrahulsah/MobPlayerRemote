@@ -247,6 +247,23 @@ class RemoteViewModel(
         dispatchCommand(PlayerCommandPayload(action = "HOME"))
     }
 
+    fun sendTextInput(text: String) {
+        viewModelScope.launch {
+            socketRepository.sendMessage(WebSocketMessage("TEXT_INPUT", text))
+        }
+    }
+
+    fun sendTextSubmit(query: String) {
+        if (query.isBlank()) return
+        viewModelScope.launch {
+            socketRepository.sendMessage(WebSocketMessage("TEXT_SUBMIT", query.trim()))
+        }
+    }
+
+    fun search(query: String) {
+        sendTextSubmit(query)
+    }
+
     fun loadMedia(url: String, title: String? = null) {
         if (url.isBlank()) return
         viewModelScope.launch {

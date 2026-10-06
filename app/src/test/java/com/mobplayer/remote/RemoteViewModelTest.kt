@@ -220,4 +220,39 @@ class RemoteViewModelTest {
         viewModel.resetUploadState()
         assertEquals(com.mobplayer.remote.model.UploadState.Idle, viewModel.uploadState.value)
     }
+
+    @Test
+    fun testSendTextInput() = runTest(testDispatcher) {
+        val testScope = this
+        val socketRepo = ControlSocketRepository(testScope)
+        val viewModel = RemoteViewModel(socketRepo)
+
+        viewModel.sendTextInput("Big Buck Bunny")
+    }
+
+    @Test
+    fun testSendTextSubmitAndSearch() = runTest(testDispatcher) {
+        val testScope = this
+        val socketRepo = ControlSocketRepository(testScope)
+        val viewModel = RemoteViewModel(socketRepo)
+
+        // Valid query
+        viewModel.sendTextSubmit("relaxing music")
+        viewModel.search("4K nature")
+
+        // Blank query boundary condition: should not dispatch
+        viewModel.sendTextSubmit("")
+        viewModel.sendTextSubmit("   ")
+        viewModel.search("")
+    }
+
+    @Test
+    fun testLoadMediaCommand() = runTest(testDispatcher) {
+        val testScope = this
+        val socketRepo = ControlSocketRepository(testScope)
+        val viewModel = RemoteViewModel(socketRepo)
+
+        viewModel.loadMedia("https://example.com/video.mp4", "Sample Video")
+        viewModel.loadMedia("") // Blank URL boundary test
+    }
 }

@@ -153,4 +153,19 @@ class SerializationTest {
         val ipv6BracketedDevice = com.mobplayer.remote.model.TvDevice(name = "TV IPv6 Brackets", host = "[fe80::1]", port = 8080)
         assertEquals("ws://[fe80::1]:8080/control", ipv6BracketedDevice.endpointUrl)
     }
+
+    @Test
+    fun testSearchTextInputAndSubmitWebSocketMessages() {
+        val textInputMsg = WebSocketMessage(type = "TEXT_INPUT", payload = "avatar movie")
+        val encodedInput = json.encodeToString(textInputMsg)
+        val decodedInput = json.decodeFromString<WebSocketMessage>(encodedInput)
+        assertEquals("TEXT_INPUT", decodedInput.type)
+        assertEquals("avatar movie", decodedInput.payload)
+
+        val textSubmitMsg = WebSocketMessage(type = "TEXT_SUBMIT", payload = "interstellar trailer")
+        val encodedSubmit = json.encodeToString(textSubmitMsg)
+        val decodedSubmit = json.decodeFromString<WebSocketMessage>(encodedSubmit)
+        assertEquals("TEXT_SUBMIT", decodedSubmit.type)
+        assertEquals("interstellar trailer", decodedSubmit.payload)
+    }
 }

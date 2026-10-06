@@ -27,6 +27,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -37,6 +39,7 @@ import androidx.compose.material.icons.automirrored.filled.VolumeDown
 import androidx.compose.material.icons.automirrored.filled.VolumeMute
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.FastForward
@@ -51,6 +54,7 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material3.AlertDialog
@@ -100,6 +104,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -130,6 +135,7 @@ fun RemoteControlScreen(
 
     var selectedTab by remember { mutableIntStateOf(0) } // 0: Remote Pad, 1: Player, 2: TV Logs
     var showLoadMediaDialog by remember { mutableStateOf(false) }
+    var showSearchDialog by remember { mutableStateOf(false) }
 
     val videoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
@@ -190,6 +196,14 @@ fun RemoteControlScreen(
                     }
                 },
                 actions = {
+                    // Search on TV / YouTube
+                    IconButton(onClick = {
+                        triggerHaptic()
+                        showSearchDialog = true
+                    }) {
+                        Icon(Icons.Default.Search, contentDescription = "Search TV")
+                    }
+
                     // Upload Local Video File
                     IconButton(onClick = {
                         triggerHaptic()
@@ -320,13 +334,15 @@ fun RemoteControlScreen(
                     0 -> RemotePadTabContent(
                         state = state,
                         viewModel = viewModel,
-                        onTriggerHaptic = ::triggerHaptic
+                        onTriggerHaptic = ::triggerHaptic,
+                        onOpenSearchDialog = { showSearchDialog = true }
                     )
                     1 -> MediaPlayerTabContent(
                         state = state,
                         viewModel = viewModel,
                         onTriggerHaptic = ::triggerHaptic,
                         onOpenLoadDialog = { showLoadMediaDialog = true },
+                        onOpenSearchDialog = { showSearchDialog = true },
                         onPickVideo = { videoPickerLauncher.launch(arrayOf("video/*")) }
                     )
                     2 -> TvLogsTabContent(
@@ -338,6 +354,19 @@ fun RemoteControlScreen(
                 }
             }
         }
+    }
+
+    if (showSearchDialog) {
+        SearchTvDialog(
+            onDismiss = { showSearchDialog = false },
+            onSearch = { query ->
+                viewModel.sendTextSubmit(query)
+                showSearchDialog = false
+            },
+            onQueryChange = { text ->
+                viewModel.sendTextInput(text)
+            }
+        )
     }
 
     if (showLoadMediaDialog) {
@@ -358,7 +387,8 @@ fun RemoteControlScreen(
 private fun RemotePadTabContent(
     state: PlayerStatePayload?,
     viewModel: RemoteViewModel,
-    onTriggerHaptic: () -> Unit
+    onTriggerHaptic: () -> Unit,
+    onOpenSearchDialog: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -368,7 +398,7 @@ private fun RemotePadTabContent(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
-        // Navigation Action Buttons (Back, Home, Stop)
+        // Navigation Action Buttons (Back, Home, Search, Stop)
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceEvenly
@@ -378,7 +408,7 @@ private fun RemotePadTabContent(
                     onTriggerHaptic()
                     viewModel.sendBack()
                 },
-                modifier = Modifier.weight(1f).padding(horizontal = 4.dp),
+                modifier = Modifier.weight(1f).padding(horizontal = 3.dp),
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -391,7 +421,7 @@ private fun RemotePadTabContent(
                     onTriggerHaptic()
                     viewModel.sendHome()
                 },
-                modifier = Modifier.weight(1f).padding(horizontal = 4.dp),
+                modifier = Modifier.weight(1f).padding(horizontal = 3.dp),
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Icon(Icons.Default.Home, contentDescription = "Home")
@@ -402,9 +432,22 @@ private fun RemotePadTabContent(
             OutlinedButton(
                 onClick = {
                     onTriggerHaptic()
+                    onOpenSearchDialog()
+                },
+                modifier = Modifier.weight(1f).padding(horizontal = 3.dp),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Icon(Icons.Default.Search, contentDescription = "Search")
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Search")
+            }
+
+            OutlinedButton(
+                onClick = {
+                    onTriggerHaptic()
                     viewModel.stop()
                 },
-                modifier = Modifier.weight(1f).padding(horizontal = 4.dp),
+                modifier = Modifier.weight(1f).padding(horizontal = 3.dp),
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.outlinedButtonColors(
                     contentColor = MaterialTheme.colorScheme.error
@@ -623,6 +666,7 @@ private fun MediaPlayerTabContent(
     viewModel: RemoteViewModel,
     onTriggerHaptic: () -> Unit,
     onOpenLoadDialog: () -> Unit,
+    onOpenSearchDialog: () -> Unit,
     onPickVideo: () -> Unit
 ) {
     val currentPos = (state?.positionMs ?: 0L).coerceAtLeast(0L)
@@ -893,10 +937,10 @@ private fun MediaPlayerTabContent(
             }
         }
 
-        // Media Stream & Upload Actions Row
+        // Media Stream, Search & Upload Actions Row
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Button(
                 onClick = {
@@ -907,8 +951,24 @@ private fun MediaPlayerTabContent(
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Icon(Icons.Default.Link, contentDescription = null)
-                Spacer(modifier = Modifier.width(6.dp))
-                Text("Stream URL")
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Stream")
+            }
+
+            Button(
+                onClick = {
+                    onTriggerHaptic()
+                    onOpenSearchDialog()
+                },
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.secondary
+                )
+            ) {
+                Icon(Icons.Default.Search, contentDescription = null)
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Search")
             }
 
             OutlinedButton(
@@ -920,8 +980,8 @@ private fun MediaPlayerTabContent(
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Icon(Icons.Default.CloudUpload, contentDescription = null)
-                Spacer(modifier = Modifier.width(6.dp))
-                Text("Upload Video")
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Upload")
             }
         }
 
@@ -942,12 +1002,18 @@ private fun TvLogsTabContent(
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
     var selectedFilter by remember { mutableStateOf<LogDirection?>(null) }
+    var logSearchQuery by remember { mutableStateOf("") }
     var rawType by remember { mutableStateOf("COMMAND") }
     var rawPayload by remember { mutableStateOf("{\"action\":\"PLAY\"}") }
 
-    val filteredLogs = remember(logs, selectedFilter) {
-        if (selectedFilter == null) logs
-        else logs.filter { it.direction == selectedFilter }
+    val filteredLogs = remember(logs, selectedFilter, logSearchQuery) {
+        logs.filter { entry ->
+            val matchesFilter = selectedFilter == null || entry.direction == selectedFilter
+            val matchesSearch = logSearchQuery.isBlank() ||
+                entry.type.contains(logSearchQuery, ignoreCase = true) ||
+                entry.payload.contains(logSearchQuery, ignoreCase = true)
+            matchesFilter && matchesSearch
+        }
     }
 
     Column(
@@ -994,6 +1060,25 @@ private fun TvLogsTabContent(
                 }
             }
         }
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Search Bar for Logs
+        OutlinedTextField(
+            value = logSearchQuery,
+            onValueChange = { logSearchQuery = it },
+            placeholder = { Text("Search logs by keyword...") },
+            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+            trailingIcon = {
+                if (logSearchQuery.isNotEmpty()) {
+                    IconButton(onClick = { logSearchQuery = "" }) {
+                        Icon(Icons.Default.Close, contentDescription = "Clear search")
+                    }
+                }
+            },
+            singleLine = true,
+            shape = RoundedCornerShape(10.dp),
+            modifier = Modifier.fillMaxWidth()
+        )
 
         Spacer(modifier = Modifier.height(8.dp))
 
@@ -1365,6 +1450,96 @@ fun LoadMediaDialog(
                 enabled = urlInput.isNotBlank()
             ) {
                 Text("Play on TV")
+            }
+        },
+        dismissButton = {
+            OutlinedButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+fun SearchTvDialog(
+    onDismiss: () -> Unit,
+    onSearch: (query: String) -> Unit,
+    onQueryChange: ((String) -> Unit)? = null
+) {
+    var queryInput by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Icon(Icons.Default.Search, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+        },
+        title = { Text("Search on TV", fontWeight = FontWeight.Bold) },
+        text = {
+            Column {
+                Text(
+                    "Search YouTube videos, songs, trailers, or type directly to your TV screen:",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = queryInput,
+                    onValueChange = {
+                        queryInput = it
+                        onQueryChange?.invoke(it)
+                    },
+                    label = { Text("Search query") },
+                    placeholder = { Text("e.g. music, movie trailers...") },
+                    leadingIcon = {
+                        Icon(Icons.Default.Search, contentDescription = null)
+                    },
+                    trailingIcon = {
+                        if (queryInput.isNotEmpty()) {
+                            IconButton(onClick = {
+                                queryInput = ""
+                                onQueryChange?.invoke("")
+                            }) {
+                                Icon(Icons.Default.Close, contentDescription = "Clear")
+                            }
+                        }
+                    },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(onSearch = {
+                        if (queryInput.isNotBlank()) {
+                            onSearch(queryInput.trim())
+                        }
+                    }),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Text("Popular Presets:", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    val presets = listOf("Music", "News", "Gaming", "Movie Trailers", "Sports", "4K HDR")
+                    presets.forEach { preset ->
+                        SuggestionChip(
+                            onClick = {
+                                queryInput = preset
+                                onSearch(preset)
+                            },
+                            label = { Text(preset) }
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onSearch(queryInput.trim()) },
+                enabled = queryInput.isNotBlank()
+            ) {
+                Text("Search on TV")
             }
         },
         dismissButton = {
