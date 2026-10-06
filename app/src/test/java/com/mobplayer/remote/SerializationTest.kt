@@ -87,11 +87,22 @@ class SerializationTest {
                 "volume": 1.0
             }
         """.trimIndent()
-
         val decoded = json.decodeFromString<PlayerStatePayload>(rawJson)
         assertEquals(false, decoded.isPlaying)
         assertEquals(1000L, decoded.positionMs)
         assertEquals(0L, decoded.durationMs)
         assertEquals(1.0f, decoded.volume, 0.001f)
+    }
+
+    @Test
+    fun testTvDeviceEndpointUrl() {
+        val ipv4Device = com.mobplayer.remote.model.TvDevice(name = "TV IPv4", host = "192.168.1.50", port = 8080)
+        assertEquals("ws://192.168.1.50:8080/control", ipv4Device.endpointUrl)
+
+        val ipv6Device = com.mobplayer.remote.model.TvDevice(name = "TV IPv6", host = "fe80::1", port = 8080)
+        assertEquals("ws://[fe80::1]:8080/control", ipv6Device.endpointUrl)
+
+        val ipv6BracketedDevice = com.mobplayer.remote.model.TvDevice(name = "TV IPv6 Brackets", host = "[fe80::1]", port = 8080)
+        assertEquals("ws://[fe80::1]:8080/control", ipv6BracketedDevice.endpointUrl)
     }
 }

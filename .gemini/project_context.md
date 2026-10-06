@@ -31,12 +31,14 @@ MobPlayer Remote is a companion Android mobile application designed to discover,
             │                            │                     │
             ▼                            ▼                     ▼
     Android NsdManager          EncryptedSharedPrefs       Ktor Client
-      (_http._tcp.)              (MasterKey AES-256)      (ws://ip:8080)
+     (_mobplayer._tcp.)          (MasterKey AES-256)      (ws://ip:8080)
 ```
 
 ### 2.1. Network Discovery (`NsdDiscoveryManager.kt` & `DeviceDiscoveryRepository.kt`)
-- Uses Android's `NsdManager` with a Wi-Fi `MulticastLock` to discover active TV instances advertising `_http._tcp.`.
+- Uses Android's `NsdManager` with a Wi-Fi `MulticastLock` to discover active TV instances advertising `_mobplayer._tcp.` (resolves on mDNS to `_mobplayer._tcp.local`).
 - Filters services matching service name prefix `MobPlayer TV` (to support indexed dynamic suffixes like `MobPlayer TV (1)`).
+- Implements safe sequential service resolution with `Mutex` to prevent Android's concurrent `FAILURE_ALREADY_ACTIVE` resolve bug.
+- Emits detailed Logcat telemetry for all discovery lifecycle stages (`onDiscoveryStarted`, `onServiceFound`, `onServiceResolved`, `onServiceLost`, and error conditions).
 - Resolves host IPv4 address and port (default `8080`) into `TvDevice` domain models emitted over a reactive `Flow<List<TvDevice>>`.
 
 ### 2.2. WebSocket Client Transport (`ControlSocketRepository.kt`)

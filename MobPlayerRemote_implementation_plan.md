@@ -16,8 +16,10 @@
 **Objective:** Enable the app to scan the local Wi-Fi network and discover active TV instances.
 
 1.  **NSD Client Implementation:**
-    *   Create an `NsdManager` wrapper class to handle the discovery of the `_http._tcp.` service type.
-    *   Implement the `NsdManager.DiscoveryListener` and `NsdManager.ResolveListener` to filter services matching prefix `MobPlayer TV` (to accommodate network suffix indices like `MobPlayer TV (1)`).
+    *   Create an `NsdManager` wrapper class to handle the discovery of the `_mobplayer._tcp.` service type (resolving to `_mobplayer._tcp.local` on local network).
+    *   Implement safe sequential service resolution with `Mutex` to prevent concurrent resolve collisions (`FAILURE_ALREADY_ACTIVE`).
+    *   Implement comprehensive logging across all discovery lifecycle events (`onDiscoveryStarted`, `onServiceFound`, `onServiceResolved`, `onServiceLost`, and error handlers).
+    *   Filter services matching prefix `MobPlayer TV` (to accommodate network suffix indices like `MobPlayer TV (1)`).
 2.  **Discovery Repository & State:**
     *   Create `DeviceDiscoveryRepository` exposing a `Flow<List<TvDevice>>`.
     *   Map the resolved `java.net.InetAddress` and port (default `8080`) to the `TvDevice` model.
