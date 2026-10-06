@@ -54,7 +54,7 @@ class MainActivity : ComponentActivity() {
         object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                return RemoteViewModel(app.socketRepository) as T
+                return RemoteViewModel(app.socketRepository, app.searchPreferencesRepository) as T
             }
         }
     }

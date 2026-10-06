@@ -344,4 +344,42 @@ class RemoteViewModelTest {
         assertEquals(555L, socketRepo.logs.value[0].id)
         assertEquals("PREVIOUS_LOG", socketRepo.logs.value[0].type)
     }
+
+    @Test
+    fun testSearchHistoryIntegrationInRemoteViewModel() = runTest(testDispatcher) {
+        val testScope = this
+        val socketRepo = ControlSocketRepository(testScope)
+        val storageMap = mutableMapOf<String, String>()
+        val fakeStorage = object : com.mobplayer.remote.repository.LogStorage {
+            override fun getString(key: String): String? = storageMap[key]
+            override fun putString(key: String, value: String) { storageMap[key] = value }
+            override fun remove(key: String) { storageMap.remove(key) }
+        }
+        val searchPrefsRepo = com.mobplayer.remote.repository.SearchPreferencesRepository(storage = fakeStorage)
+        val viewModel = RemoteViewModel(socketRepo, searchPreferencesRepository = searchPrefsRepo)
+
+        assertTrue(viewModel.searchHistory.value.isEmpty())
+
+        // Submitting search automatically saves query
+        viewModel.sendTextSubmit("Jazz music")
+        assertEquals(1, viewModel.searchHistory.value.size)
+        assertEquals("Jazz music", viewModel.searchHistory.value[0])
+
+        // Submit another search -> must appear on top (latest on top)
+        viewModel.sendTextSubmit("Movie trailer")
+        assertEquals(2, viewModel.searchHistory.value.size)
+        assertEquals("Movie trailer", viewModel.searchHistory.value[0])
+        assertEquals("Jazz music", viewModel.searchHistory.value[1])
+
+        // Resubmitting first query moves it back to top without duplicating
+        viewModel.search("Jazz music")
+        assertEquals(2, viewModel.searchHistory.value.size)
+        assertEquals("Jazz music", viewModel.searchHistory.value[0])
+        assertEquals("Movie trailer", viewModel.searchHistory.value[1])
+
+        // Clearing search history
+        viewModel.clearSearchHistory()
+        assertTrue(viewModel.searchHistory.value.isEmpty())
+        assertTrue(searchPrefsRepo.getSearchHistory().isEmpty())
+    }
 }

@@ -6,6 +6,7 @@ import com.mobplayer.remote.network.NsdDiscoveryManager
 import com.mobplayer.remote.repository.AuthTokenRepository
 import com.mobplayer.remote.repository.DeviceDiscoveryRepository
 import com.mobplayer.remote.repository.LogPreferencesRepository
+import com.mobplayer.remote.repository.SearchPreferencesRepository
 
 class MobPlayerRemoteApp : Application() {
 
@@ -13,6 +14,9 @@ class MobPlayerRemoteApp : Application() {
         private set
 
     lateinit var logPreferencesRepository: LogPreferencesRepository
+        private set
+
+    lateinit var searchPreferencesRepository: SearchPreferencesRepository
         private set
 
     lateinit var socketRepository: ControlSocketRepository
@@ -25,6 +29,7 @@ class MobPlayerRemoteApp : Application() {
         super.onCreate()
         tokenRepository = AuthTokenRepository(applicationContext)
         logPreferencesRepository = LogPreferencesRepository(applicationContext)
+        searchPreferencesRepository = SearchPreferencesRepository(applicationContext)
         socketRepository = ControlSocketRepository(logPreferencesRepository = logPreferencesRepository)
         val nsdManager = NsdDiscoveryManager(applicationContext)
         discoveryRepository = DeviceDiscoveryRepository(nsdManager)

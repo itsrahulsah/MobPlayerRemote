@@ -14,6 +14,7 @@ import com.mobplayer.remote.model.WebSocketMessage
 import com.mobplayer.remote.network.ConnectionState
 import com.mobplayer.remote.network.ControlSocketRepository
 import com.mobplayer.remote.network.MediaUploadForegroundService
+import com.mobplayer.remote.repository.SearchPreferencesRepository
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -29,7 +30,8 @@ import kotlinx.serialization.json.Json
 
 @OptIn(FlowPreview::class)
 class RemoteViewModel(
-    private val socketRepository: ControlSocketRepository
+    private val socketRepository: ControlSocketRepository,
+    private val searchPreferencesRepository: SearchPreferencesRepository? = null
 ) : ViewModel() {
 
     private val json = Json {
@@ -43,6 +45,12 @@ class RemoteViewModel(
 
     val connectionState: StateFlow<ConnectionState> = socketRepository.connectionState
     val logs: StateFlow<List<RemoteLogEntry>> = socketRepository.logs
+
+    // Search query history in MRU order (latest on top)
+    private val _searchHistory = MutableStateFlow<List<String>>(
+        searchPreferencesRepository?.getSearchHistory() ?: emptyList()
+    )
+    val searchHistory: StateFlow<List<String>> = _searchHistory.asStateFlow()
 
     // Volume debouncing flow to avoid flooding WebSocket during rapid slider adjustments
     private val volumeUpdateFlow = MutableSharedFlow<Float>(extraBufferCapacity = 1)
@@ -247,6 +255,23 @@ class RemoteViewModel(
         dispatchCommand(PlayerCommandPayload(action = "HOME"))
     }
 
+    fun saveSearchQuery(query: String) {
+        val trimmed = query.trim()
+        if (trimmed.isBlank()) return
+        val updated = searchPreferencesRepository?.saveQuery(trimmed) ?: run {
+            val list = _searchHistory.value.toMutableList()
+            list.removeAll { it.equals(trimmed, ignoreCase = true) }
+            list.add(0, trimmed)
+            list
+        }
+        _searchHistory.value = updated
+    }
+
+    fun clearSearchHistory() {
+        searchPreferencesRepository?.clearHistory()
+        _searchHistory.value = emptyList()
+    }
+
     fun sendTextInput(text: String) {
         viewModelScope.launch {
             socketRepository.sendMessage(WebSocketMessage("TEXT_INPUT", text))
@@ -254,9 +279,11 @@ class RemoteViewModel(
     }
 
     fun sendTextSubmit(query: String) {
-        if (query.isBlank()) return
+        val trimmed = query.trim()
+        if (trimmed.isBlank()) return
+        saveSearchQuery(trimmed)
         viewModelScope.launch {
-            socketRepository.sendMessage(WebSocketMessage("TEXT_SUBMIT", query.trim()))
+            socketRepository.sendMessage(WebSocketMessage("TEXT_SUBMIT", trimmed))
         }
     }
 

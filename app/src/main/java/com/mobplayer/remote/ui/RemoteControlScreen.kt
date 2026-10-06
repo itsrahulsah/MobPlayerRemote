@@ -45,6 +45,7 @@ import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.FastForward
 import androidx.compose.material.icons.filled.FastRewind
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -103,6 +104,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
@@ -133,6 +135,7 @@ fun RemoteControlScreen(
     val connectionState by viewModel.connectionState.collectAsState()
     val logs by viewModel.logs.collectAsState()
     val uploadState by viewModel.uploadState.collectAsState()
+    val searchHistory by viewModel.searchHistory.collectAsState()
     val haptics = LocalHapticFeedback.current
     val context = LocalContext.current
 
@@ -359,7 +362,8 @@ fun RemoteControlScreen(
             },
             onQueryChange = { text ->
                 viewModel.sendTextInput(text)
-            }
+            },
+            searchHistory = searchHistory
         )
     }
 
@@ -396,14 +400,149 @@ private fun RemotePadTabContent(
     viewModel: RemoteViewModel,
     onTriggerHaptic: () -> Unit
 ) {
+    val searchHistory by viewModel.searchHistory.collectAsState()
+    var searchQuery by remember { mutableStateOf("") }
+    val focusManager = LocalFocusManager.current
+
+    val suggestions = remember(searchHistory, searchQuery) {
+        if (searchQuery.isBlank()) {
+            searchHistory
+        } else {
+            searchHistory.filter { it.contains(searchQuery.trim(), ignoreCase = true) }
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp, vertical = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(20.dp)
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        // Search Bar with Auto-fill & Recent Suggestions (Positioned directly on top of Back & Home)
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                placeholder = { Text("Search TV, YouTube, titles...") },
+                leadingIcon = {
+                    Icon(
+                        Icons.Default.Search,
+                        contentDescription = "Search",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                },
+                trailingIcon = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(
+                                onClick = {
+                                    searchQuery = ""
+                                },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Close,
+                                    contentDescription = "Clear search",
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                        IconButton(
+                            onClick = {
+                                if (searchQuery.isNotBlank()) {
+                                    onTriggerHaptic()
+                                    viewModel.sendTextSubmit(searchQuery.trim())
+                                    focusManager.clearFocus()
+                                }
+                            },
+                            enabled = searchQuery.isNotBlank(),
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.Send,
+                                contentDescription = "Submit search",
+                                modifier = Modifier.size(18.dp),
+                                tint = if (searchQuery.isNotBlank()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                            )
+                        }
+                    }
+                },
+                singleLine = true,
+                shape = RoundedCornerShape(16.dp),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(onSearch = {
+                    if (searchQuery.isNotBlank()) {
+                        onTriggerHaptic()
+                        viewModel.sendTextSubmit(searchQuery.trim())
+                        focusManager.clearFocus()
+                    }
+                }),
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            // Auto-Fill Suggestions (Latest searched on top)
+            if (suggestions.isNotEmpty()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (searchQuery.isBlank()) "Recent Searches" else "Suggestions",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    if (searchQuery.isBlank()) {
+                        Text(
+                            text = "Clear",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier
+                                .clickable {
+                                    onTriggerHaptic()
+                                    viewModel.clearSearchHistory()
+                                }
+                                .padding(horizontal = 4.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    suggestions.forEach { item ->
+                        SuggestionChip(
+                            onClick = {
+                                onTriggerHaptic()
+                                searchQuery = item
+                                viewModel.sendTextSubmit(item)
+                                focusManager.clearFocus()
+                            },
+                            label = { Text(item, maxLines = 1) },
+                            icon = {
+                                Icon(
+                                    Icons.Default.History,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            },
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                    }
+                }
+            }
+        }
+
         // Navigation Action Buttons (Back, Home)
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -1495,7 +1634,8 @@ fun LoadMediaDialog(
 fun SearchTvDialog(
     onDismiss: () -> Unit,
     onSearch: (query: String) -> Unit,
-    onQueryChange: ((String) -> Unit)? = null
+    onQueryChange: ((String) -> Unit)? = null,
+    searchHistory: List<String> = emptyList()
 ) {
     var queryInput by remember { mutableStateOf("") }
 
@@ -1543,6 +1683,37 @@ fun SearchTvDialog(
                     }),
                     modifier = Modifier.fillMaxWidth()
                 )
+
+                if (searchHistory.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text("Recent Searches:", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        searchHistory.take(8).forEach { recent ->
+                            SuggestionChip(
+                                onClick = {
+                                    queryInput = recent
+                                    onSearch(recent)
+                                },
+                                label = { Text(recent) },
+                                icon = {
+                                    Icon(
+                                        Icons.Default.History,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp),
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            )
+                        }
+                    }
+                }
+
                 Spacer(modifier = Modifier.height(12.dp))
                 Text("Popular Presets:", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(6.dp))
