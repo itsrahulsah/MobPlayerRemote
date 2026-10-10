@@ -87,11 +87,139 @@ class SerializationTest {
                 "volume": 1.0
             }
         """.trimIndent()
-
         val decoded = json.decodeFromString<PlayerStatePayload>(rawJson)
         assertEquals(false, decoded.isPlaying)
         assertEquals(1000L, decoded.positionMs)
         assertEquals(0L, decoded.durationMs)
         assertEquals(1.0f, decoded.volume, 0.001f)
+        assertEquals(1.0f, decoded.speed, 0.001f)
+    }
+
+    @Test
+    fun testPlayerCommandPayloadStop() {
+        val stopCommand = PlayerCommandPayload(action = "STOP")
+        val encoded = json.encodeToString(stopCommand)
+        val decoded = json.decodeFromString<PlayerCommandPayload>(encoded)
+        assertEquals("STOP", decoded.action)
+        assertNull(decoded.seekToMs)
+        assertNull(decoded.volume)
+        assertNull(decoded.speed)
+    }
+
+    @Test
+    fun testPlayerCommandPayloadSetSpeed() {
+        val speedCommand = PlayerCommandPayload(action = "SET_SPEED", speed = 1.75f)
+        val encoded = json.encodeToString(speedCommand)
+        val decoded = json.decodeFromString<PlayerCommandPayload>(encoded)
+        assertEquals("SET_SPEED", decoded.action)
+        assertEquals(1.75f, decoded.speed ?: 1.0f, 0.001f)
+    }
+
+    @Test
+    fun testPlayerStatePayloadWithSpeed() {
+        val rawJson = """
+            {
+                "isPlaying": true,
+                "positionMs": 15000,
+                "durationMs": 120000,
+                "volume": 0.6,
+                "speed": 1.5
+            }
+        """.trimIndent()
+
+        val decoded = json.decodeFromString<PlayerStatePayload>(rawJson)
+        assertTrue(decoded.isPlaying)
+        assertEquals(15000L, decoded.positionMs)
+        assertEquals(120000L, decoded.durationMs)
+        assertEquals(0.6f, decoded.volume, 0.001f)
+        assertEquals(1.5f, decoded.speed, 0.001f)
+    }
+
+    @Test
+    fun testTvDeviceHttpBaseUrl() {
+        val device = com.mobplayer.remote.model.TvDevice("Living Room TV", "192.168.1.50", 8080)
+        assertEquals("ws://192.168.1.50:8080/control", device.endpointUrl)
+        assertEquals("http://192.168.1.50:8080", device.httpBaseUrl)
+    }
+
+    @Test
+    fun testTvDeviceEndpointUrl() {
+        val ipv4Device = com.mobplayer.remote.model.TvDevice(name = "TV IPv4", host = "192.168.1.50", port = 8080)
+        assertEquals("ws://192.168.1.50:8080/control", ipv4Device.endpointUrl)
+
+        val ipv6Device = com.mobplayer.remote.model.TvDevice(name = "TV IPv6", host = "fe80::1", port = 8080)
+        assertEquals("ws://[fe80::1]:8080/control", ipv6Device.endpointUrl)
+
+        val ipv6BracketedDevice = com.mobplayer.remote.model.TvDevice(name = "TV IPv6 Brackets", host = "[fe80::1]", port = 8080)
+        assertEquals("ws://[fe80::1]:8080/control", ipv6BracketedDevice.endpointUrl)
+    }
+
+    @Test
+    fun testSearchTextInputAndSubmitWebSocketMessages() {
+        val textInputMsg = WebSocketMessage(type = "TEXT_INPUT", payload = "avatar movie")
+        val encodedInput = json.encodeToString(textInputMsg)
+        val decodedInput = json.decodeFromString<WebSocketMessage>(encodedInput)
+        assertEquals("TEXT_INPUT", decodedInput.type)
+        assertEquals("avatar movie", decodedInput.payload)
+
+        val textSubmitMsg = WebSocketMessage(type = "TEXT_SUBMIT", payload = "interstellar trailer")
+        val encodedSubmit = json.encodeToString(textSubmitMsg)
+        val decodedSubmit = json.decodeFromString<WebSocketMessage>(encodedSubmit)
+        assertEquals("TEXT_SUBMIT", decodedSubmit.type)
+        assertEquals("interstellar trailer", decodedSubmit.payload)
+    }
+
+    @Test
+    fun testRemoteLogEntrySerialization() {
+        val entry = com.mobplayer.remote.model.RemoteLogEntry(
+            id = 123456789L,
+            timestamp = "14:32:00.123",
+            direction = com.mobplayer.remote.model.LogDirection.REQUEST,
+            type = "COMMAND",
+            payload = "{\"action\":\"PLAY\"}",
+            isSuccess = true,
+            epochMs = 123456789L
+        )
+
+        val encoded = json.encodeToString(entry)
+        val decoded = json.decodeFromString<com.mobplayer.remote.model.RemoteLogEntry>(encoded)
+
+        assertEquals(123456789L, decoded.id)
+        assertEquals("14:32:00.123", decoded.timestamp)
+        assertEquals(com.mobplayer.remote.model.LogDirection.REQUEST, decoded.direction)
+        assertEquals("COMMAND", decoded.type)
+        assertEquals("{\"action\":\"PLAY\"}", decoded.payload)
+        assertTrue(decoded.isSuccess)
+        assertEquals(123456789L, decoded.epochMs)
+    }
+
+    @Test
+    fun testRemoteLogEntryBackwardCompatibilityWithoutEpochMs() {
+        val rawJson = """
+            {
+                "id": 987654321,
+                "timestamp": "12:00:00.000",
+                "direction": "RESPONSE",
+                "type": "STATE_UPDATE",
+                "payload": "{}",
+                "isSuccess": true
+            }
+        """.trimIndent()
+
+        val decoded = json.decodeFromString<com.mobplayer.remote.model.RemoteLogEntry>(rawJson)
+        assertEquals(987654321L, decoded.id)
+        assertEquals("12:00:00.000", decoded.timestamp)
+        assertEquals(com.mobplayer.remote.model.LogDirection.RESPONSE, decoded.direction)
+        // epochMs defaults to id when not present in JSON
+        assertEquals(987654321L, decoded.epochMs)
+    }
+
+    @Test
+    fun testLogDirectionAllValuesSerialization() {
+        for (direction in com.mobplayer.remote.model.LogDirection.values()) {
+            val encoded = json.encodeToString(direction)
+            val decoded = json.decodeFromString<com.mobplayer.remote.model.LogDirection>(encoded)
+            assertEquals(direction, decoded)
+        }
     }
 }

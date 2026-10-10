@@ -3,6 +3,7 @@ package com.mobplayer.remote
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.viewModels
 import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
@@ -13,11 +14,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
-import com.mobplayer.remote.network.ControlSocketRepository
-import com.mobplayer.remote.network.NsdDiscoveryManager
-import com.mobplayer.remote.repository.AuthTokenRepository
-import com.mobplayer.remote.repository.DeviceDiscoveryRepository
 import com.mobplayer.remote.ui.DiscoveryScreen
 import com.mobplayer.remote.ui.PinAuthScreen
 import com.mobplayer.remote.ui.RemoteControlScreen
@@ -31,26 +30,39 @@ import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
-    private lateinit var tokenRepository: AuthTokenRepository
-    private lateinit var socketRepository: ControlSocketRepository
-    private lateinit var discoveryRepository: DeviceDiscoveryRepository
-    private lateinit var discoveryViewModel: DiscoveryViewModel
-    private lateinit var authViewModel: AuthViewModel
-    private lateinit var remoteViewModel: RemoteViewModel
+    private val app get() = application as MobPlayerRemoteApp
+
+    private val discoveryViewModel: DiscoveryViewModel by viewModels {
+        object : ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                return DiscoveryViewModel(app.discoveryRepository) as T
+            }
+        }
+    }
+
+    private val authViewModel: AuthViewModel by viewModels {
+        object : ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                return AuthViewModel(app.socketRepository, app.tokenRepository) as T
+            }
+        }
+    }
+
+    private val remoteViewModel: RemoteViewModel by viewModels {
+        object : ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                return RemoteViewModel(app.socketRepository, app.searchPreferencesRepository) as T
+            }
+        }
+    }
 
     private var backgroundDisconnectJob: Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        tokenRepository = AuthTokenRepository(applicationContext)
-        socketRepository = ControlSocketRepository()
-        val nsdManager = NsdDiscoveryManager(applicationContext)
-        discoveryRepository = DeviceDiscoveryRepository(nsdManager)
-
-        discoveryViewModel = DiscoveryViewModel(discoveryRepository)
-        authViewModel = AuthViewModel(socketRepository, tokenRepository)
-        remoteViewModel = RemoteViewModel(socketRepository)
 
         setupLifecycleKeepalive()
 
@@ -74,7 +86,7 @@ class MainActivity : ComponentActivity() {
                     backgroundDisconnectJob?.cancel()
                     backgroundDisconnectJob = lifecycleScope.launch {
                         delay(180_000L) // 3 minutes
-                        socketRepository.disconnect()
+                        app.socketRepository.disconnect()
                     }
                 }
                 Lifecycle.Event.ON_START -> {
@@ -83,7 +95,9 @@ class MainActivity : ComponentActivity() {
                     backgroundDisconnectJob = null
                 }
                 Lifecycle.Event.ON_DESTROY -> {
-                    socketRepository.disconnect()
+                    if (isFinishing) {
+                        app.socketRepository.disconnect()
+                    }
                 }
                 else -> Unit
             }
